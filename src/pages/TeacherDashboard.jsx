@@ -66,6 +66,15 @@ function TeacherDashboard({ user, onLogout }) {
     } catch (error) { alert('Failed to activate class: ' + error.message) }
   }
 
+  const handleDeleteClass = async (classId) => {
+    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) return
+    setLoading(true)
+    try {
+      await classAPI.delete(classId)
+      await loadTeacherData()
+    } catch (error) { alert('Failed to delete class: ' + error.message) } finally { setLoading(false) }
+  }
+
   const colorMap = {
     primary: { bg: 'bg-primary-100 dark:bg-primary-900/30', text: 'text-primary-600 dark:text-primary-400' },
     purple: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-400' },
@@ -80,9 +89,9 @@ function TeacherDashboard({ user, onLogout }) {
       case 'create-classroom':
         return <TeacherCreateClassroomTab onCreateClass={handleCreateClass} />
       case 'classroom-list':
-        return <TeacherClassroomListTab classes={classes} onNavigate={(id) => navigate(`/classroom/${id}`)} onStartClass={handleStartClass} onCreateClass={() => onTabChange('create-classroom')} />
+        return <TeacherClassroomListTab classes={classes} onNavigate={(id) => navigate(`/classroom/${id}`)} onStartClass={handleStartClass} onCreateClass={() => onTabChange('create-classroom')} onDeleteClass={handleDeleteClass} />
       case 'attending-students':
-        return <TeacherAttendingStudentsTab />
+        return <TeacherAttendingStudentsTab classes={classes} />
       case 'ai-study-plan':
         return <TeacherAIStudyPlanTab />
       case 'notes-materials':

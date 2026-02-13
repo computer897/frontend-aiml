@@ -146,12 +146,14 @@ function SignUp({ setUser }) {
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Full Name</label>
               <div className="relative group">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                  <User className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
                 <input
                   id="name" name="name" type="text"
                   value={formData.name} onChange={handleChange}
                   placeholder="Enter your full name" required
-                  className="input-base pl-11"
+                  className="input-base input-with-icon"
                 />
               </div>
             </div>
@@ -160,12 +162,14 @@ function SignUp({ setUser }) {
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email Address</label>
               <div className="relative group">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                  <Mail className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
                 <input
                   id="email" name="email" type="email"
                   value={formData.email} onChange={handleChange}
                   placeholder="name@example.com" required
-                  className="input-base pl-11"
+                  className="input-base input-with-icon"
                 />
               </div>
             </div>
@@ -175,13 +179,15 @@ function SignUp({ setUser }) {
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
                 <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                  </div>
                   <input
                     id="password" name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password} onChange={handleChange}
                     placeholder="Create password" required
-                    className="input-base pl-11 pr-11"
+                    className="input-base input-with-icon pr-12"
                   />
                   <button type="button" onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -193,12 +199,14 @@ function SignUp({ setUser }) {
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirm</label>
                 <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                  </div>
                   <input
                     id="confirmPassword" name="confirmPassword" type="password"
                     value={formData.confirmPassword} onChange={handleChange}
                     placeholder="Confirm password" required
-                    className="input-base pl-11"
+                    className="input-base input-with-icon"
                   />
                 </div>
               </div>

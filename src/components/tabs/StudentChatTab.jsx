@@ -168,7 +168,7 @@ function StudentChatTab() {
             <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
               <div className="flex items-center gap-2">
                 <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition flex-shrink-0">
-                  <Paperclip className="w-4.5 h-4.5 text-gray-400" />
+                  <Paperclip className="w-4 h-4 text-gray-400" />
                 </button>
                 <div className="relative flex-1">
                   <input
@@ -186,7 +186,7 @@ function StudentChatTab() {
                   className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition flex-shrink-0 disabled:opacity-40"
                   disabled={!message.trim()}
                 >
-                  <Send className="w-4.5 h-4.5" />
+                  <Send className="w-4 h-4" />
                 </button>
               </div>
             </div>

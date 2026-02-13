@@ -1,8 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Search, ChevronDown, User, LogOut, GraduationCap } from 'lucide-react'
+import { Bell, Search, ChevronDown, User, LogOut, GraduationCap, Sun, Sunset, Moon } from 'lucide-react'
+
+// Get time-based greeting
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) {
+    return { text: 'Good Morning', icon: Sun }
+  } else if (hour < 17) {
+    return { text: 'Good Afternoon', icon: Sunset }
+  } else {
+    return { text: 'Good Evening', icon: Moon }
+  }
+}
 
 function Header({ user, onLogout, title, sidebarCollapsed }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [greeting, setGreeting] = useState(getGreeting())
   const dropdownRef = useRef(null)
 
   useEffect(() => {
@@ -15,8 +28,18 @@ function Header({ user, onLogout, title, sidebarCollapsed }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Update greeting every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setGreeting(getGreeting())
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
   const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'
   const isTeacher = user?.role === 'teacher'
+  const firstName = user?.name?.split(' ')[0] || 'User'
+  const GreetingIcon = greeting.icon
 
   return (
     <header className={`sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800 transition-all duration-300 ${
@@ -32,7 +55,10 @@ function Header({ user, onLogout, title, sidebarCollapsed }) {
             </div>
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{title || 'Dashboard'}</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <GreetingIcon className="w-5 h-5 text-amber-500" />
+              {greeting.text}, {firstName}!
+            </h1>
             <p className="text-xs text-gray-400 hidden sm:block">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
@@ -43,11 +69,13 @@ function Header({ user, onLogout, title, sidebarCollapsed }) {
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Search - desktop only */}
           <div className="hidden md:flex items-center relative">
-            <Search className="absolute left-3 w-4 h-4 text-gray-400" />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+              <Search className="w-4 h-4 text-gray-400" />
+            </div>
             <input
               type="text"
               placeholder="Search..."
-              className="w-56 pl-9 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-primary-500 outline-none transition"
+              className="w-56 pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-0 rounded-xl text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-primary-500 outline-none transition"
             />
           </div>
 

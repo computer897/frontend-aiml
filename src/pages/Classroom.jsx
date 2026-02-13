@@ -255,7 +255,7 @@ function WaitingRoom({ classData, onClassStarted, onLeave }) {
 }
 
 // ─── Waiting For Approval Screen (Google Meet style) ────────────────────────
-function WaitingForApprovalScreen({ classData, onLeave, onRejected }) {
+function WaitingForApprovalScreen({ classData, onLeave, connectionState }) {
   const [dots, setDots] = useState('')
 
   useEffect(() => {
@@ -263,13 +263,16 @@ function WaitingForApprovalScreen({ classData, onLeave, onRejected }) {
     return () => clearInterval(t)
   }, [])
 
+  const isConnecting = connectionState === 'connecting'
+  const hasError = connectionState === 'error'
+
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 safe-bottom">
       <div className="max-w-lg w-full text-center">
         <div className="relative inline-flex mb-6 sm:mb-8">
-          <div className="absolute inset-0 bg-yellow-500/20 rounded-full animate-pulse" />
-          <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-yellow-600 to-orange-600 rounded-full flex items-center justify-center shadow-2xl">
-            <Clock className="w-10 h-10 sm:w-14 sm:h-14 text-white" />
+          <div className={`absolute inset-0 ${hasError ? 'bg-red-500/20' : 'bg-yellow-500/20'} rounded-full animate-pulse`} />
+          <div className={`relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br ${hasError ? 'from-red-600 to-red-700' : 'from-yellow-600 to-orange-600'} rounded-full flex items-center justify-center shadow-2xl`}>
+            {hasError ? <AlertCircle className="w-10 h-10 sm:w-14 sm:h-14 text-white" /> : <Clock className="w-10 h-10 sm:w-14 sm:h-14 text-white" />}
           </div>
         </div>
 
@@ -278,12 +281,35 @@ function WaitingForApprovalScreen({ classData, onLeave, onRejected }) {
           Teacher: <span className="text-gray-300 font-medium">{classData.teacher_name}</span>
         </p>
 
-        <div className="bg-gray-800/80 border border-yellow-600/30 rounded-2xl p-5 sm:p-8 mb-6">
-          <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-400 animate-spin mx-auto mb-4" />
-          <h2 className="text-white text-base sm:text-xl font-semibold mb-2">Waiting for approval{dots}</h2>
-          <p className="text-gray-400 text-xs sm:text-sm">
-            The host will let you in soon. Please wait.
-          </p>
+        <div className={`bg-gray-800/80 border ${hasError ? 'border-red-600/30' : 'border-yellow-600/30'} rounded-2xl p-5 sm:p-8 mb-6`}>
+          {hasError ? (
+            <>
+              <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-red-400 mx-auto mb-4" />
+              <h2 className="text-white text-base sm:text-xl font-semibold mb-2">Connection Error</h2>
+              <p className="text-gray-400 text-xs sm:text-sm mb-4">
+                Unable to connect to the classroom server. Please check your internet connection and try again.
+              </p>
+              <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
+                Retry
+              </button>
+            </>
+          ) : isConnecting ? (
+            <>
+              <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-primary-400 animate-spin mx-auto mb-4" />
+              <h2 className="text-white text-base sm:text-xl font-semibold mb-2">Connecting{dots}</h2>
+              <p className="text-gray-400 text-xs sm:text-sm">
+                Establishing connection to the classroom...
+              </p>
+            </>
+          ) : (
+            <>
+              <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-400 animate-spin mx-auto mb-4" />
+              <h2 className="text-white text-base sm:text-xl font-semibold mb-2">Waiting for approval{dots}</h2>
+              <p className="text-gray-400 text-xs sm:text-sm">
+                The host will let you in soon. Please wait.
+              </p>
+            </>
+          )}
         </div>
 
         <button onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
@@ -626,13 +652,36 @@ function VideoGrid({ localStream, localVideoOn, remoteStreams, user, canvasRef }
 
 // ─── Participants Panel ──────────────────────────────────────────────────────
 function ParticipantsPanel({ participants, user, onMuteUser, onRemoveUser }) {
+  // Calculate total count: teacher (if exists) + approved students
+  const totalCount = (participants.teacherName ? 1 : 0) + (participants.students?.length || 0)
+  
+  // If no server data yet, show at least the current user
+  const showSelfOnly = !participants.teacherName && (!participants.students || participants.students.length === 0)
+  
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-gray-700">
-        <h3 className="font-semibold text-white">People ({participants.count || 1})</h3>
+        <h3 className="font-semibold text-white">People ({showSelfOnly ? 1 : totalCount || 1})</h3>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-1">
-        {/* Teacher */}
+        {/* Show self when no server data */}
+        {showSelfOnly && (
+          <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-700/50">
+            <div className={`w-8 h-8 ${user?.role === 'teacher' ? 'bg-purple-600' : 'bg-primary-600'} rounded-full flex items-center justify-center flex-shrink-0`}>
+              <span className="text-white text-xs font-semibold">
+                {user?.name?.split(' ').map(n => n[0]).join('') || '?'}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white font-medium truncate">{user?.name} (You)</p>
+              <p className={`text-xs ${user?.role === 'teacher' ? 'text-purple-400' : 'text-gray-400'}`}>
+                {user?.role === 'teacher' ? 'Host' : 'Student'}
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Teacher from server data */}
         {participants.teacherName && (
           <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-700/50">
             <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -685,21 +734,6 @@ function ParticipantsPanel({ participants, user, onMuteUser, onRemoveUser }) {
             )}
           </div>
         ))}
-
-        {/* If no participants data yet, show self */}
-        {!participants.teacherName && (!participants.students || participants.students.length === 0) && (
-          <div className="flex items-center gap-3 p-2.5 rounded-lg">
-            <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-semibold">
-                {user?.name?.split(' ').map(n => n[0]).join('') || '?'}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium truncate">{user?.name} (You)</p>
-              <p className="text-xs text-gray-400">{user?.role === 'teacher' ? 'Host' : 'Student'}</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -723,10 +757,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const [forceMuteNotice, setForceMuteNotice] = useState(false)
   const [removedFromRoom, setRemovedFromRoom] = useState(false)
 
-  // Waiting room states
-  const [waitingForApproval, setWaitingForApproval] = useState(false)
+  // Waiting room states - Students start in waiting state by default
+  const [waitingForApproval, setWaitingForApproval] = useState(user?.role === 'student')
   const [joinRejected, setJoinRejected] = useState(false)
   const [joinRequests, setJoinRequests] = useState([]) // Teacher's waiting list
+
+  // Connection state for debugging
+  const [connectionState, setConnectionState] = useState('connecting')
 
   // WebRTC state
   const [remoteStreams, setRemoteStreams] = useState({})
@@ -765,6 +802,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream
         }
+        // Apply initial mic/video settings to the stream
+        const initMic = initialSettings?.micOn ?? true
+        const initVideo = initialSettings?.videoOn ?? true
+        stream.getAudioTracks().forEach(t => { t.enabled = initMic })
+        stream.getVideoTracks().forEach(t => { t.enabled = initVideo })
       }
 
       // Create fresh WebRTC manager for this session
@@ -772,6 +814,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       webrtcRef.current = rtc
 
       // Set callbacks
+      rtc.callbacks.onConnectionStateChange = (state) => {
+        console.log('[Classroom] Connection state:', state)
+        setConnectionState(state)
+      }
+
       rtc.callbacks.onRemoteStream = (socketId, remoteStream, userInfo) => {
         console.log('Remote stream received:', socketId, userInfo)
         setRemoteStreams(prev => ({
@@ -789,7 +836,33 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       }
 
       rtc.callbacks.onParticipantsUpdated = (parts) => {
+        console.log('[Classroom] Participants updated:', parts)
         setParticipants(parts)
+        // Sync participants with students engagement list
+        if (parts.students && parts.students.length > 0) {
+          setStudents(prev => {
+            const updated = [...prev]
+            parts.students.forEach(p => {
+              const existingIdx = updated.findIndex(s => s.id === p.userId)
+              if (existingIdx < 0 && p.userId) {
+                // Add new student with default engagement values
+                updated.push({
+                  id: p.userId,
+                  name: p.userName || 'Student',
+                  engagement: 0,
+                  status: 'active',
+                  lookingAtScreen: false,
+                })
+              }
+            })
+            // Remove students no longer in participants
+            const participantIds = parts.students.map(p => p.userId).filter(Boolean)
+            return updated.filter(s => participantIds.includes(s.id))
+          })
+        } else {
+          // No students in room, clear engagement list
+          setStudents([])
+        }
       }
 
       rtc.callbacks.onTeacherLeft = () => {
@@ -948,16 +1021,17 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     try {
       const ws = createWebSocket(classData.class_id)
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-        if (data.type === 'engagement_update') {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'engagement_update' && msg.data) {
+          const d = msg.data
           setStudents(prev => {
-            const idx = prev.findIndex(s => s.id === data.student_id)
+            const idx = prev.findIndex(s => s.id === d.student_id)
             const entry = {
-              id: data.student_id,
-              name: data.student_name || 'Student',
-              engagement: Math.round(data.engagement_percentage),
-              status: data.face_detected ? 'active' : 'inactive',
-              lookingAtScreen: data.looking_at_screen,
+              id: d.student_id,
+              name: d.student_name || 'Student',
+              engagement: Math.round(d.engagement_percentage || 0),
+              status: d.is_face_detected ? 'active' : 'inactive',
+              lookingAtScreen: d.is_looking_at_screen,
             }
             if (idx >= 0) {
               const u = [...prev]
@@ -1056,7 +1130,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
   // ── Student: Show waiting for approval screen ──
   if (user?.role === 'student' && waitingForApproval) {
-    return <WaitingForApprovalScreen classData={classData} onLeave={onLeave} />
+    return <WaitingForApprovalScreen classData={classData} onLeave={onLeave} connectionState={connectionState} />
   }
 
   // ── Student: Show rejected screen ──
@@ -1172,14 +1246,16 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                   {videoOn ? <Video className="w-5 h-5 sm:w-6 sm:h-6 text-white" /> : <VideoOff className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
                 </button>
 
-                {/* Screen share */}
-                <button
-                  onClick={handleScreenShare}
-                  className={`p-3 sm:p-4 rounded-full transition hidden sm:block ${isScreenSharing ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-600'}`}
-                  title={isScreenSharing ? 'Stop presenting' : 'Present now'}
-                >
-                  <MonitorUp className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </button>
+                {/* Screen share - Teacher only */}
+                {user?.role === 'teacher' && (
+                  <button
+                    onClick={handleScreenShare}
+                    className={`p-3 sm:p-4 rounded-full transition hidden sm:block ${isScreenSharing ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    title={isScreenSharing ? 'Stop presenting' : 'Present now'}
+                  >
+                    <MonitorUp className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </button>
+                )}
 
                 {/* Chat */}
                 <button

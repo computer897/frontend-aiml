@@ -101,7 +101,9 @@ function Login({ setUser }) {
                 Email Address
               </label>
               <div className="relative group">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                  <Mail className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
                 <input
                   id="email"
                   type="email"
@@ -109,7 +111,7 @@ function Login({ setUser }) {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
-                  className="input-base pl-11"
+                  className="input-base input-with-icon"
                 />
               </div>
             </div>
@@ -119,7 +121,9 @@ function Login({ setUser }) {
                 Password
               </label>
               <div className="relative group">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+                  <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
@@ -127,7 +131,7 @@ function Login({ setUser }) {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="input-base pl-11 pr-11"
+                  className="input-base input-with-icon pr-12"
                 />
                 <button
                   type="button"

@@ -115,6 +115,12 @@ export const classAPI = {
     })
   },
 
+  delete: async (classId) => {
+    return apiRequest(`/class/${classId}`, {
+      method: 'DELETE',
+    })
+  },
+
   getTeacherClasses: async () => {
     return apiRequest('/class/teacher/classes')
   },
