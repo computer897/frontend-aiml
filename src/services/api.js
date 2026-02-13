@@ -32,6 +32,14 @@ const apiRequest = async (endpoint, options = {}) => {
     const data = await response.json()
 
     if (!response.ok) {
+      // Handle authentication errors - token expired or invalid
+      if (response.status === 401) {
+        // Clear stored user data and redirect to login
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Session expired. Please log in again.')
+      }
+      
       // FastAPI validation errors return detail as an array of objects
       let message = 'API request failed'
       if (typeof data.detail === 'string') {
