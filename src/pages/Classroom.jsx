@@ -254,6 +254,241 @@ function WaitingRoom({ classData, onClassStarted, onLeave }) {
   )
 }
 
+// ─── Waiting For Approval Screen (Google Meet style) ────────────────────────
+function WaitingForApprovalScreen({ classData, onLeave, onRejected }) {
+  const [dots, setDots] = useState('')
+
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => (d.length >= 3 ? '' : d + '.')), 600)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 safe-bottom">
+      <div className="max-w-lg w-full text-center">
+        <div className="relative inline-flex mb-6 sm:mb-8">
+          <div className="absolute inset-0 bg-yellow-500/20 rounded-full animate-pulse" />
+          <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-yellow-600 to-orange-600 rounded-full flex items-center justify-center shadow-2xl">
+            <Clock className="w-10 h-10 sm:w-14 sm:h-14 text-white" />
+          </div>
+        </div>
+
+        <h1 className="text-white text-xl sm:text-3xl font-bold mb-2">{classData.title}</h1>
+        <p className="text-gray-400 mb-6 sm:mb-8 text-sm sm:text-base">
+          Teacher: <span className="text-gray-300 font-medium">{classData.teacher_name}</span>
+        </p>
+
+        <div className="bg-gray-800/80 border border-yellow-600/30 rounded-2xl p-5 sm:p-8 mb-6">
+          <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-400 animate-spin mx-auto mb-4" />
+          <h2 className="text-white text-base sm:text-xl font-semibold mb-2">Waiting for approval{dots}</h2>
+          <p className="text-gray-400 text-xs sm:text-sm">
+            The host will let you in soon. Please wait.
+          </p>
+        </div>
+
+        <button onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
+          Leave
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Join Rejected Screen ────────────────────────────────────────────────────
+function JoinRejectedScreen({ classData, onLeave }) {
+  return (
+    <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 safe-bottom">
+      <div className="max-w-lg w-full text-center">
+        <div className="w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-red-600 to-red-700 rounded-full flex items-center justify-center shadow-2xl mx-auto mb-6">
+          <UserX className="w-10 h-10 sm:w-14 sm:h-14 text-white" />
+        </div>
+
+        <h1 className="text-white text-xl sm:text-3xl font-bold mb-2">Request Denied</h1>
+        <p className="text-gray-400 mb-6 text-sm sm:text-base">
+          The host has denied your request to join this meeting.
+        </p>
+
+        <button onClick={onLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
+          Return to Dashboard
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Join Request Modal (Teacher sees this - Centered Professional Design) ──
+function JoinRequestModal({ requests, onAccept, onReject, onAcceptAll, onRejectAll }) {
+  if (!requests || requests.length === 0) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-700/50 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary-600/20 to-purple-600/20 px-6 py-5 border-b border-gray-700/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-600/20 rounded-full flex items-center justify-center">
+                <Users className="w-5 h-5 text-primary-400" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-lg">Waiting Room</h2>
+                <p className="text-gray-400 text-sm">{requests.length} {requests.length === 1 ? 'person' : 'people'} waiting to join</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Participant List */}
+        <div className="max-h-80 overflow-y-auto">
+          {requests.map((req, index) => (
+            <div 
+              key={req.socketId} 
+              className={`px-6 py-4 flex items-center gap-4 hover:bg-gray-700/30 transition-colors ${index !== requests.length - 1 ? 'border-b border-gray-700/30' : ''}`}
+            >
+              {/* Avatar */}
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="text-white text-base font-bold">
+                    {(req.userName || '?').split(' ').map(n => n[0]).join('').toUpperCase()}
+                  </span>
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-yellow-500 rounded-full border-2 border-gray-800 flex items-center justify-center">
+                  <Clock className="w-2.5 h-2.5 text-gray-900" />
+                </div>
+              </div>
+
+              {/* Name & Info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium truncate">{req.userName || 'Student'}</p>
+                <p className="text-gray-500 text-sm">Requesting to join</p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onReject(req.socketId)}
+                  className="p-2.5 rounded-full bg-gray-700 hover:bg-red-600/80 text-gray-400 hover:text-white transition-all duration-200 group"
+                  title="Deny"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onAccept(req.socketId)}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-full text-sm font-medium transition-all duration-200 shadow-lg shadow-primary-600/25 hover:shadow-primary-500/40"
+                >
+                  Admit
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer Actions */}
+        {requests.length > 1 && (
+          <div className="px-6 py-4 bg-gray-800/50 border-t border-gray-700/50 flex items-center justify-between gap-3">
+            <button
+              onClick={() => requests.forEach(r => onReject(r.socketId))}
+              className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium transition-all duration-200"
+            >
+              Deny all
+            </button>
+            <button
+              onClick={() => requests.forEach(r => onAccept(r.socketId))}
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white rounded-xl text-sm font-medium transition-all duration-200 shadow-lg shadow-primary-600/25"
+            >
+              Admit all
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Class Finished Screen ───────────────────────────────────────────────────
+function ClassFinishedScreen({ classData, onLeave }) {
+  const endTime = classData?.ended_at ? new Date(classData.ended_at) : new Date()
+  
+  return (
+    <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+      <div className="max-w-lg w-full">
+        {/* Card */}
+        <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-700/50 rounded-3xl shadow-2xl overflow-hidden">
+          {/* Header with icon */}
+          <div className="relative px-8 pt-10 pb-6 text-center">
+            <div className="absolute inset-0 bg-gradient-to-b from-green-600/10 to-transparent" />
+            <div className="relative">
+              <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-xl shadow-green-500/25">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">Class Ended</h1>
+              <p className="text-gray-400">This session has been completed</p>
+            </div>
+          </div>
+
+          {/* Class Details */}
+          <div className="px-8 pb-6">
+            <div className="bg-gray-800/50 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary-600/20 rounded-xl flex items-center justify-center">
+                  <GraduationCap className="w-6 h-6 text-primary-400" />
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Class</p>
+                  <p className="text-white font-medium">{classData?.title || 'Class Session'}</p>
+                </div>
+              </div>
+              
+              <div className="h-px bg-gray-700/50" />
+              
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-purple-600/20 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Teacher</p>
+                  <p className="text-white font-medium">{classData?.teacher_name || 'Instructor'}</p>
+                </div>
+              </div>
+              
+              <div className="h-px bg-gray-700/50" />
+              
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-orange-600/20 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-gray-500 text-sm">Ended at</p>
+                  <p className="text-white font-medium">
+                    {endTime.toLocaleDateString()} at {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <div className="px-8 pb-8">
+            <button
+              onClick={onLeave}
+              className="w-full py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg shadow-primary-600/25 hover:shadow-primary-500/40"
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+
+        {/* Footer text */}
+        <p className="text-center text-gray-600 text-sm mt-6">
+          Thank you for participating in this class
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Teacher Left Banner ─────────────────────────────────────────────────────
 function TeacherLeftBanner({ onLeave }) {
   return (
@@ -488,6 +723,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const [forceMuteNotice, setForceMuteNotice] = useState(false)
   const [removedFromRoom, setRemovedFromRoom] = useState(false)
 
+  // Waiting room states
+  const [waitingForApproval, setWaitingForApproval] = useState(false)
+  const [joinRejected, setJoinRejected] = useState(false)
+  const [joinRequests, setJoinRequests] = useState([]) // Teacher's waiting list
+
   // WebRTC state
   const [remoteStreams, setRemoteStreams] = useState({})
   const [participants, setParticipants] = useState({ teacher: null, students: [], count: 1 })
@@ -588,6 +828,44 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         setRemovedFromRoom(true)
       }
 
+      // ── Waiting Room Callbacks ──
+      
+      // Student: waiting for teacher approval
+      rtc.callbacks.onWaitingForApproval = () => {
+        console.log('[Classroom] Waiting for approval')
+        setWaitingForApproval(true)
+      }
+
+      // Student: approved to join
+      rtc.callbacks.onJoinApproved = () => {
+        console.log('[Classroom] Join approved!')
+        setWaitingForApproval(false)
+        setJoinRejected(false)
+        // Start attendance after approval
+        if (user?.role === 'student') {
+          attendanceAPI.start(classData.class_id)
+            .then(resp => setAttendanceId(resp.attendance_id))
+            .catch(err => console.error('Failed to start attendance:', err))
+        }
+      }
+
+      // Student: rejected by teacher
+      rtc.callbacks.onJoinRejected = (message) => {
+        console.log('[Classroom] Join rejected:', message)
+        setWaitingForApproval(false)
+        setJoinRejected(true)
+      }
+
+      // Teacher: receive join request from student
+      rtc.callbacks.onJoinRequest = (data) => {
+        console.log('[Classroom] Join request from:', data.userName)
+        setJoinRequests(prev => {
+          // Avoid duplicates
+          if (prev.some(r => r.socketId === data.socketId)) return prev
+          return [...prev, data]
+        })
+      }
+
       // Join the room
       if (stream) {
         rtc.joinRoom(
@@ -608,15 +886,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         }
       }
 
-      // Student: start attendance
-      if (user?.role === 'student') {
-        try {
-          const resp = await attendanceAPI.start(classData.class_id)
-          setAttendanceId(resp.attendance_id)
-        } catch (err) {
-          console.error('Failed to start attendance:', err)
-        }
-      }
+      // Note: For students, attendance is started AFTER approval (see onJoinApproved callback)
     }
 
     init()
@@ -746,6 +1016,23 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     }
   }
 
+  // ── Waiting Room Handlers (Teacher) ──
+  const handleAcceptStudent = (studentSocketId) => {
+    if (webrtcRef.current) {
+      webrtcRef.current.acceptStudent(studentSocketId)
+      // Remove from local join requests list
+      setJoinRequests(prev => prev.filter(r => r.socketId !== studentSocketId))
+    }
+  }
+
+  const handleRejectStudent = (studentSocketId) => {
+    if (webrtcRef.current) {
+      webrtcRef.current.rejectStudent(studentSocketId)
+      // Remove from local join requests list
+      setJoinRequests(prev => prev.filter(r => r.socketId !== studentSocketId))
+    }
+  }
+
   const handleScreenShare = async () => {
     if (!webrtcRef.current) return
     if (isScreenSharing) {
@@ -767,6 +1054,16 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   // Determine active side panel
   const activeSidePanel = showChat ? 'chat' : showDoubts ? 'doubts' : showEngagement ? 'engagement' : showParticipants ? 'participants' : null
 
+  // ── Student: Show waiting for approval screen ──
+  if (user?.role === 'student' && waitingForApproval) {
+    return <WaitingForApprovalScreen classData={classData} onLeave={onLeave} />
+  }
+
+  // ── Student: Show rejected screen ──
+  if (user?.role === 'student' && joinRejected) {
+    return <JoinRejectedScreen classData={classData} onLeave={onLeave} />
+  }
+
   return (
     <div className="h-[100dvh] bg-gray-900 flex flex-col overflow-hidden">
       {/* Teacher Left overlay */}
@@ -774,6 +1071,15 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
       {/* Removed from room overlay */}
       {removedFromRoom && <RemovedBanner onLeave={onLeave} />}
+
+      {/* Teacher: Join Request Modal for waiting students */}
+      {user?.role === 'teacher' && (
+        <JoinRequestModal
+          requests={joinRequests}
+          onAccept={handleAcceptStudent}
+          onReject={handleRejectStudent}
+        />
+      )}
 
       {/* Force mute toast */}
       {forceMuteNotice && (
@@ -992,6 +1298,7 @@ function Classroom({ user }) {
   const [classData, setClassData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isLive, setIsLive] = useState(false)
+  const [isFinished, setIsFinished] = useState(false)
   const [hasJoined, setHasJoined] = useState(false)
   const [joinSettings, setJoinSettings] = useState(null)
 
@@ -1001,6 +1308,8 @@ function Classroom({ user }) {
         const data = await classAPI.get(id)
         setClassData(data)
         setIsLive(data.is_active)
+        // Check if class has ended (was active but now finished)
+        setIsFinished(data.is_finished === true || data.status === 'finished' || data.status === 'ended')
       } catch (err) {
         alert('Class not found: ' + err.message)
         navigate(user.role === 'student' ? '/student-dashboard' : '/teacher-dashboard')
@@ -1018,6 +1327,7 @@ function Classroom({ user }) {
   const handleClassStarted = useCallback((updatedData) => {
     setClassData(updatedData)
     setIsLive(true)
+    setIsFinished(false)
   }, [])
 
   const handleJoin = useCallback((settings) => {
@@ -1037,6 +1347,11 @@ function Classroom({ user }) {
   }
 
   if (!classData) return null
+
+  // Show finished screen if class has ended
+  if (isFinished) {
+    return <ClassFinishedScreen classData={classData} onLeave={handleLeave} />
+  }
 
   // Teacher flow: PreJoin -> LiveClassroom
   if (user.role === 'teacher') {
