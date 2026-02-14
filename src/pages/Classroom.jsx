@@ -2,14 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Phone,
-  HelpCircle, Users, Monitor, Loader2, Clock, GraduationCap,
-  Shield, AlertCircle, MonitorUp, Hand, X, UserX
+  HelpCircle, Users, Monitor, Loader2, Clock,
+  Shield, AlertCircle, MonitorUp, Hand, X, UserX, Eye
 } from 'lucide-react'
 import { classAPI, attendanceAPI, createWebSocket, webcamUtils } from '../services/api'
 import { createWebRTCManager } from '../services/webrtc'
+import { createFaceTracker, generateAttendanceMetadata, loadFaceDetectionModels } from '../services/faceDetection'
 import EngagementList from '../components/EngagementList'
 import ChatPanel from '../components/ChatPanel'
 import DoubtsPanel from '../components/DoubtsPanel'
+import ConsentModal from '../components/ConsentModal'
 
 // ─── Permission Dialog (Google Meet Style) ─────────────────────────────────
 function PermissionDialog({ onAllow, onDeny }) {
@@ -45,6 +47,8 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   const [stream, setStream] = useState(null)
   const [permissionState, setPermissionState] = useState('prompt')
   const [showPermissionDialog, setShowPermissionDialog] = useState(true)
+  const [showConsentModal, setShowConsentModal] = useState(false)
+  const [consentGiven, setConsentGiven] = useState(false)
   const [loading, setLoading] = useState(false)
   const videoRef = useRef(null)
 
@@ -72,11 +76,22 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
     setShowPermissionDialog(false)
   }
 
+  // Attach or detach stream based on videoOn state
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream
+    if (!videoRef.current) return
+    
+    if (stream && videoOn) {
+      // Attach stream when video should be on
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream
+      }
+    } else {
+      // Detach stream when video should be off
+      if (videoRef.current.srcObject) {
+        videoRef.current.srcObject = null
+      }
     }
-  }, [stream])
+  }, [stream, videoOn])
 
   useEffect(() => {
     if (stream) stream.getAudioTracks().forEach(t => { t.enabled = micOn })
@@ -93,12 +108,41 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   }, [])
 
   const handleJoin = () => {
-    onJoin({ micOn, videoOn, stream })
+    // Students must consent to AI attendance tracking before joining
+    if (user?.role === 'student' && !consentGiven) {
+      setShowConsentModal(true)
+      return
+    }
+    onJoin({ micOn, videoOn, stream, consentGiven })
   }
+
+  const handleConsentAccept = () => {
+    setConsentGiven(true)
+    setShowConsentModal(false)
+    // Auto-join after consent
+    onJoin({ micOn, videoOn, stream, consentGiven: true })
+  }
+
+  const handleConsentDecline = () => {
+    setShowConsentModal(false)
+    // Cannot join without consent - return to dashboard
+    onLeave()
+  }
+
+  const showVideo = permissionState === 'granted' && videoOn
 
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
       {showPermissionDialog && <PermissionDialog onAllow={requestPermissions} onDeny={denyPermissions} />}
+      
+      {/* Consent Modal for AI Attendance - Students only */}
+      {showConsentModal && user?.role === 'student' && (
+        <ConsentModal 
+          classTitle={classData.title}
+          onAccept={handleConsentAccept}
+          onDecline={handleConsentDecline}
+        />
+      )}
 
       <div className="max-w-4xl w-full">
         <div className="text-center mb-6">
@@ -111,9 +155,17 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
         <div className="grid md:grid-cols-2 gap-6 items-center">
           {/* Video Preview */}
           <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-video">
-            {permissionState === 'granted' && videoOn ? (
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
-            ) : (
+            {/* Always render video element to maintain srcObject reference */}
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className={`w-full h-full object-cover ${showVideo ? '' : 'hidden'}`} 
+              style={{ transform: 'scaleX(-1)' }} 
+            />
+            {/* Show avatar when video is off */}
+            {!showVideo && (
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
                 <div className="w-24 h-24 bg-primary-600 rounded-full flex items-center justify-center">
                   <span className="text-white text-3xl font-bold">
@@ -223,8 +275,8 @@ function WaitingRoom({ classData, onClassStarted, onLeave }) {
       <div className="max-w-lg w-full text-center">
         <div className="relative inline-flex mb-6 sm:mb-8">
           <div className="absolute inset-0 bg-primary-500/20 rounded-full animate-ping" />
-          <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gradient-to-br from-primary-600 to-primary-700 rounded-full flex items-center justify-center shadow-2xl">
-            <GraduationCap className="w-10 h-10 sm:w-14 sm:h-14 text-white" />
+          <div className="relative w-20 h-20 sm:w-28 sm:h-28 bg-white/10 backdrop-blur rounded-full flex items-center justify-center shadow-2xl p-3">
+            <img src="/logo.png" alt="VC Room" className="w-full h-full object-contain" />
           </div>
         </div>
 
@@ -458,8 +510,8 @@ function ClassFinishedScreen({ classData, onLeave }) {
           <div className="px-8 pb-6">
             <div className="bg-gray-800/50 rounded-2xl p-5 space-y-4">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary-600/20 rounded-xl flex items-center justify-center">
-                  <GraduationCap className="w-6 h-6 text-primary-400" />
+                <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center p-2">
+                  <img src="/logo.png" alt="VC Room" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Class</p>
@@ -554,28 +606,42 @@ function RemovedBanner({ onLeave }) {
 // ─── Video Tile ──────────────────────────────────────────────────────────────
 function VideoTile({ stream, muted, mirrored, name, role, isLocal, videoOn }) {
   const videoRef = useRef(null)
-  const showVideo = stream && videoOn !== false
+  // Use the videoOn prop for both local and remote (VideoGrid now passes it for both)
+  const showVideo = stream && videoOn === true
 
+  // Attach or detach stream based on videoOn state for reliable toggle
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream
+    if (!videoRef.current) return
+    
+    if (stream && showVideo) {
+      // Attach stream when video should be on
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream
+      }
+    } else {
+      // Detach stream when video should be off (more reliable than CSS hiding)
+      if (videoRef.current.srcObject) {
+        videoRef.current.srcObject = null
+      }
     }
-  }, [stream])
+  }, [stream, showVideo])
 
   const initials = name?.split(' ').map(n => n[0]).join('') || '?'
 
   return (
     <div className="relative w-full h-full bg-gray-800 rounded-xl overflow-hidden group">
-      {/* Always render video element to preserve srcObject across toggles */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={muted}
-        className={`absolute inset-0 w-full h-full object-cover ${showVideo ? '' : 'invisible'}`}
-        style={mirrored ? { transform: 'scaleX(-1)' } : undefined}
-      />
-      {/* Avatar overlay when video is off */}
+      {/* Video element - only visible when showVideo is true */}
+      {showVideo && (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={muted}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={mirrored ? { transform: 'scaleX(-1)' } : undefined}
+        />
+      )}
+      {/* Avatar shown when video is off */}
       {!showVideo && (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-primary-600 rounded-full flex items-center justify-center">
@@ -625,18 +691,24 @@ function VideoGrid({ localStream, localVideoOn, remoteStreams, user, canvasRef }
       </div>
 
       {/* Remote videos */}
-      {Object.entries(remoteStreams).map(([socketId, { stream, userInfo }]) => (
-        <div key={socketId} className="relative min-h-0">
-          <VideoTile
-            stream={stream}
-            muted={false}
-            mirrored={false}
-            name={userInfo?.userName}
-            role={userInfo?.role || 'student'}
-            isLocal={false}
-          />
-        </div>
-      ))}
+      {Object.entries(remoteStreams).map(([socketId, { stream, userInfo }]) => {
+        // Check if remote video track is enabled
+        const videoTracks = stream?.getVideoTracks() || []
+        const remoteVideoOn = videoTracks.length > 0 && videoTracks.some(t => t.enabled && t.readyState === 'live')
+        return (
+          <div key={socketId} className="relative min-h-0">
+            <VideoTile
+              stream={stream}
+              muted={false}
+              mirrored={false}
+              name={userInfo?.userName}
+              role={userInfo?.role || 'student'}
+              isLocal={false}
+              videoOn={remoteVideoOn}
+            />
+          </div>
+        )
+      })}
 
       {/* Empty state */}
       {Object.keys(remoteStreams).length === 0 && (
@@ -752,10 +824,21 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const [unreadMessages, setUnreadMessages] = useState(0)
   const [doubts, setDoubts] = useState([])
   const [students, setStudents] = useState([])
-  const [attendanceId, setAttendanceId] = useState(null)
+  const [sessionId, setSessionId] = useState(null)
   const [teacherLeft, setTeacherLeft] = useState(false)
   const [forceMuteNotice, setForceMuteNotice] = useState(false)
   const [removedFromRoom, setRemovedFromRoom] = useState(false)
+
+  // Face detection state (privacy-focused, browser-side only)
+  const [faceTrackingActive, setFaceTrackingActive] = useState(false)
+  const [lastDetection, setLastDetection] = useState(null)
+  const [faceModelsLoading, setFaceModelsLoading] = useState(false)
+  
+  // Dual-track camera state
+  // Track A: WebRTC video (visible to others) - controlled by videoOn
+  // Track B: Local attendance video (internal) - keeps running for attendance
+  const [attendanceStreamActive, setAttendanceStreamActive] = useState(false)
+  const consentGiven = initialSettings?.consentGiven ?? false
 
   // Waiting room states - Students start in waiting state by default
   const [waitingForApproval, setWaitingForApproval] = useState(user?.role === 'student')
@@ -773,9 +856,10 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
   const localVideoRef = useRef(null)
   const localStreamRef = useRef(null)
+  const attendanceVideoRef = useRef(null) // Separate video element for attendance tracking
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
-  const frameIntervalRef = useRef(null)
+  const faceTrackerRef = useRef(null) // Face detection tracker
   const webrtcRef = useRef(null)
 
   // ── Initialize media and WebRTC ──
@@ -914,11 +998,69 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         console.log('[Classroom] Join approved!')
         setWaitingForApproval(false)
         setJoinRejected(false)
-        // Start attendance after approval
-        if (user?.role === 'student') {
-          attendanceAPI.start(classData.class_id)
-            .then(resp => setAttendanceId(resp.attendance_id))
+        // Start attendance and face tracking after approval (student with consent)
+        if (user?.role === 'student' && consentGiven) {
+          const newSessionId = `${classData.class_id}_${Date.now()}`
+          setSessionId(newSessionId)
+          
+          // Start attendance session on backend
+          attendanceAPI.start(classData.class_id, newSessionId)
+            .then(() => {
+              console.log('[Classroom] Attendance session started')
+              // Initialize face tracking
+              initializeFaceTracking(newSessionId)
+            })
             .catch(err => console.error('Failed to start attendance:', err))
+        }
+      }
+
+      // Initialize face detection for attendance (browser-side only)
+      const initializeFaceTracking = async (sessionIdToUse) => {
+        if (!consentGiven || user?.role !== 'student') return
+        
+        setFaceModelsLoading(true)
+        try {
+          await loadFaceDetectionModels()
+          
+          // Set up the attendance video element (separate from WebRTC video)
+          if (attendanceVideoRef.current && localStreamRef.current) {
+            attendanceVideoRef.current.srcObject = localStreamRef.current
+            setAttendanceStreamActive(true)
+            
+            // Create face tracker
+            const tracker = createFaceTracker(
+              attendanceVideoRef.current,
+              async (detection) => {
+                // Generate metadata (no video/images sent to server)
+                const metadata = generateAttendanceMetadata(
+                  user?.id || user?._id,
+                  classData.class_id,
+                  detection
+                )
+                metadata.session_id = sessionIdToUse
+                
+                // Update local state for UI feedback
+                setLastDetection(detection)
+                
+                // Send only metadata to backend
+                try {
+                  await attendanceAPI.submitMetadata(metadata)
+                } catch (err) {
+                  console.error('[FaceTracking] Failed to submit metadata:', err)
+                }
+              },
+              3000 // Detection interval: every 3 seconds
+            )
+            
+            faceTrackerRef.current = tracker
+            await tracker.start()
+            setFaceTrackingActive(true)
+            console.log('[Classroom] Face tracking started (browser-side)')
+          }
+        } catch (err) {
+          console.error('[Classroom] Failed to initialize face tracking:', err)
+        } finally {
+          setFaceModelsLoading(false)
         }
       }
 
@@ -969,7 +1111,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop())
       }
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current)
+      if (faceTrackerRef.current) {
+        faceTrackerRef.current.stop()
+      }
       if (wsRef.current) wsRef.current.close()
       if (webrtcRef.current) webrtcRef.current.leaveRoom()
     }
@@ -995,25 +1139,20 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     }
   }, [micOn])
 
-  // ── Attendance frame capture ──
+  // ── Dual-Track Camera Logic ──
+  // Track A: WebRTC video (controlled by videoOn state) - handled by toggle above
+  // Track B: Attendance video (stays active for face tracking even when WebRTC video is off)
   useEffect(() => {
-    if (user?.role !== 'student' || !attendanceId) return
-    if (videoOn) {
-      frameIntervalRef.current = setInterval(async () => {
-        if (canvasRef.current && localVideoRef.current) {
-          try {
-            const frame = webcamUtils.captureFrame(localVideoRef.current, canvasRef.current)
-            await attendanceAPI.submitFrame(attendanceId, frame)
-          } catch { /* silent */ }
-        }
-      }, 3000)
-    } else if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current)
-    }
-    return () => {
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current)
-    }
-  }, [videoOn, attendanceId, user?.role])
+    if (user?.role !== 'student' || !consentGiven || !faceTrackerRef.current) return
+    
+    // Face tracking continues regardless of WebRTC video state
+    // When camera is "off" for peers, attendance tracking still runs locally
+    // This is transparent to the student through the UI indicator
+    
+    // Note: The video track for attendance is never stopped, only WebRTC sending is affected
+    // This ensures continuous attendance tracking with user consent
+    
+  }, [videoOn, user?.role, consentGiven])
 
   // ── Teacher engagement WebSocket ──
   useEffect(() => {
@@ -1055,8 +1194,16 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   // ── Handlers ──
   const handleLeaveClass = async () => {
     if (!window.confirm('Leave the classroom?')) return
-    if (user?.role === 'student' && attendanceId) {
-      try { await attendanceAPI.end(attendanceId) } catch { /* ok */ }
+    
+    // Stop face tracking
+    if (faceTrackerRef.current) {
+      faceTrackerRef.current.stop()
+      setFaceTrackingActive(false)
+    }
+    
+    // End attendance session
+    if (user?.role === 'student' && sessionId) {
+      try { await attendanceAPI.end(sessionId) } catch { /* ok */ }
     }
     if (user?.role === 'teacher') {
       try { await classAPI.deactivate(classData.class_id) } catch { /* ok */ }
@@ -1201,6 +1348,43 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         <div className="flex-1 relative overflow-hidden">
           {/* Hidden video element for local stream (needed for canvas capture) */}
           <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
+          
+          {/* Hidden video element for attendance tracking (separate from WebRTC) */}
+          {user?.role === 'student' && consentGiven && (
+            <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" />
+          )}
+          
+          {/* Attendance Tracking Active Indicator - shown when camera is off but tracking continues */}
+          {user?.role === 'student' && faceTrackingActive && !videoOn && (
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
+              <Eye className="w-4 h-4 text-white" />
+              <span className="text-white text-xs font-medium">Attendance Tracking Active</span>
+              {lastDetection?.faceDetected && (
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              )}
+            </div>
+          )}
+          
+          {/* Face detection status indicator (for student awareness) */}
+          {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && (
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
+              <div className={`w-2 h-2 rounded-full ${lastDetection.faceDetected ? 'bg-green-400' : 'bg-red-400'}`} />
+              <span className="text-xs text-gray-300">
+                {lastDetection.faceDetected ? 'Face detected' : 'Face not visible'}
+              </span>
+              {lastDetection.multipleFaces && (
+                <span className="text-xs text-yellow-400 ml-1">⚠ Multiple faces</span>
+              )}
+            </div>
+          )}
+          
+          {/* Face models loading indicator */}
+          {user?.role === 'student' && faceModelsLoading && (
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur-sm rounded-lg">
+              <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
+              <span className="text-gray-300 text-xs">Loading face detection...</span>
+            </div>
+          )}
 
           <VideoGrid
             localStream={localStream}
@@ -1331,7 +1515,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                 onDismiss={(id) => setDoubts(prev => prev.filter(d => d.id !== id))}
               />
             )}
-            {showEngagement && user?.role === 'teacher' && <EngagementList students={students} />}
+            {showEngagement && user?.role === 'teacher' && <EngagementList students={students} classId={classData?.class_id} sessionId={sessionId} />}
             {showParticipants && <ParticipantsPanel participants={participants} user={user} onMuteUser={handleMuteUser} onRemoveUser={handleRemoveUser} />}
           </div>
         )}
@@ -1356,7 +1540,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                     onDismiss={(id) => setDoubts(prev => prev.filter(d => d.id !== id))}
                   />
                 )}
-                {showEngagement && user?.role === 'teacher' && <EngagementList students={students} />}
+                {showEngagement && user?.role === 'teacher' && <EngagementList students={students} classId={classData?.class_id} sessionId={sessionId} />}
                 {showParticipants && <ParticipantsPanel participants={participants} user={user} onMuteUser={handleMuteUser} onRemoveUser={handleRemoveUser} />}
               </div>
             </div>

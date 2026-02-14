@@ -6,22 +6,42 @@ import {
 } from 'lucide-react'
 import { classAPI } from '../services/api'
 import DashboardLayout from '../layouts/DashboardLayout'
-import {
-  teacherNotes, recordedSessions, studentNotifications
-} from '../data/mockData'
 import StudentClassesTab from '../components/tabs/StudentClassesTab'
 import StudentNotesTab from '../components/tabs/StudentNotesTab'
 import StudentRecordingsTab from '../components/tabs/StudentRecordingsTab'
 import StudentChatTab from '../components/tabs/StudentChatTab'
 import StudentCalendarTab from '../components/tabs/StudentCalendarTab'
 
+// Storage keys (matching other components)
+const NOTES_STORAGE_KEY = 'student_notes'
+const RECORDINGS_STORAGE_KEY = 'class_recordings'
+const NOTIFICATIONS_STORAGE_KEY = 'student_notifications'
+
 function StudentDashboard({ user, onLogout }) {
   const navigate = useNavigate()
   const [enrolledClasses, setEnrolledClasses] = useState([])
   const [classToJoin, setClassToJoin] = useState('')
   const [loading, setLoading] = useState(false)
+  const [notes, setNotes] = useState([])
+  const [recordings, setRecordings] = useState([])
+  const [notifications, setNotifications] = useState([])
 
-  useEffect(() => { loadEnrolledClasses() }, [])
+  useEffect(() => {
+    loadEnrolledClasses()
+    // Load data from localStorage
+    try {
+      const savedNotes = localStorage.getItem(NOTES_STORAGE_KEY)
+      if (savedNotes) setNotes(JSON.parse(savedNotes))
+      
+      const savedRecordings = localStorage.getItem(RECORDINGS_STORAGE_KEY)
+      if (savedRecordings) setRecordings(JSON.parse(savedRecordings))
+      
+      const savedNotifications = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY)
+      if (savedNotifications) setNotifications(JSON.parse(savedNotifications))
+    } catch (e) {
+      console.error('Error loading data from localStorage:', e)
+    }
+  }, [])
 
   const loadEnrolledClasses = async () => {
     try {
@@ -210,7 +230,9 @@ function StudentDashboard({ user, onLogout }) {
                 </h2>
               </div>
               <div className="p-5 space-y-3">
-                {teacherNotes.map(note => {
+                {notes.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No notes available</p>
+                ) : notes.slice(0, 3).map(note => {
                   const c = colorMap[note.color] || colorMap.primary
                   return (
                     <div key={note.id} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 dark:border-gray-800 hover:shadow-sm transition-all">
@@ -226,7 +248,7 @@ function StudentDashboard({ user, onLogout }) {
                           {note.subject} &middot; {note.teacher}
                         </p>
                         <p className="text-xs text-gray-400 mt-1 line-clamp-1">{note.content}</p>
-                        {note.attachments.length > 0 && (
+                        {note.attachments?.length > 0 && (
                           <div className="flex items-center gap-2 mt-2.5">
                             {note.attachments.map((file, i) => (
                               <button key={i} className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[11px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition">
@@ -255,7 +277,9 @@ function StudentDashboard({ user, onLogout }) {
                 </h2>
               </div>
               <div className="p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {recordedSessions.map(rec => {
+                {recordings.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4 col-span-full">No recordings available</p>
+                ) : recordings.slice(0, 3).map(rec => {
                   const c = colorMap[rec.color] || colorMap.primary
                   return (
                     <div key={rec.id} className="group rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden hover:shadow-md transition-all">
@@ -300,7 +324,9 @@ function StudentDashboard({ user, onLogout }) {
                 </span>
               </div>
               <div className="p-5 space-y-3">
-                {studentNotifications.map(notif => (
+                {notifications.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No notifications</p>
+                ) : notifications.map(notif => (
                   <div key={notif.id} className={`p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                     notif.isRead
                       ? 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900'

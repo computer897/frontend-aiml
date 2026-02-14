@@ -1,6 +1,7 @@
-import { AlertCircle, CheckCircle, X, Radio } from 'lucide-react'
+import { AlertCircle, CheckCircle, Radio, Download, Users, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import { attendanceAPI } from '../services/api'
 
-function EngagementList({ students, onSelectStudent }) {
+function EngagementList({ students, onSelectStudent, classId, sessionId }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'active':
@@ -28,17 +29,108 @@ function EngagementList({ students, onSelectStudent }) {
     return b.engagement - a.engagement
   })
 
+  // Calculate summary stats
+  const totalStudents = students.length
+  const activeStudents = students.filter(s => s.status === 'active').length
+  const distractedStudents = students.filter(s => s.status === 'distracted').length
+  const inactiveStudents = students.filter(s => s.status === 'inactive' || s.status === 'absent').length
+  const avgEngagement = totalStudents > 0 
+    ? Math.round(students.reduce((sum, s) => sum + (s.engagement || 0), 0) / totalStudents)
+    : 0
+
+  // Export attendance to CSV
+  const handleExportCSV = async () => {
+    if (!classId || !sessionId) {
+      alert('Session information not available for export')
+      return
+    }
+    
+    try {
+      const blob = await attendanceAPI.exportCSV(classId, sessionId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `attendance_${classId}_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export:', err)
+      alert('Failed to export attendance. Please try again.')
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-800">
       {/* Header */}
       <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-white">Student Engagement</h3>
-          <div className="flex items-center gap-1.5 px-2 py-1 bg-green-600/20 border border-green-600/40 rounded-full">
-            <Radio className="w-3 h-3 text-green-400 animate-pulse" />
-            <span className="text-green-400 text-[10px] font-semibold">LIVE</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-600/20 border border-green-600/40 rounded-full">
+              <Radio className="w-3 h-3 text-green-400 animate-pulse" />
+              <span className="text-green-400 text-[10px] font-semibold">LIVE</span>
+            </div>
+            {classId && sessionId && (
+              <button
+                onClick={handleExportCSV}
+                className="p-1.5 hover:bg-gray-700 rounded-lg transition"
+                title="Export attendance CSV"
+              >
+                <Download className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
           </div>
         </div>
+        
+        {/* Summary Stats */}
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <div className="bg-gray-700/50 rounded-lg p-2 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <Users className="w-3 h-3 text-primary-400" />
+            </div>
+            <p className="text-white text-sm font-bold">{totalStudents}</p>
+            <p className="text-gray-500 text-[10px]">Total</p>
+          </div>
+          <div className="bg-gray-700/50 rounded-lg p-2 text-center">
+            <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mb-1" />
+            <p className="text-green-400 text-sm font-bold">{activeStudents}</p>
+            <p className="text-gray-500 text-[10px]">Active</p>
+          </div>
+          <div className="bg-gray-700/50 rounded-lg p-2 text-center">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full mx-auto mb-1" />
+            <p className="text-yellow-400 text-sm font-bold">{distractedStudents}</p>
+            <p className="text-gray-500 text-[10px]">Distracted</p>
+          </div>
+          <div className="bg-gray-700/50 rounded-lg p-2 text-center">
+            <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mb-1" />
+            <p className="text-red-400 text-sm font-bold">{inactiveStudents}</p>
+            <p className="text-gray-500 text-[10px]">Inactive</p>
+          </div>
+        </div>
+
+        {/* Average Engagement */}
+        {totalStudents > 0 && (
+          <div className="bg-gray-700/30 rounded-lg p-2 mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-400">Class Average</span>
+              <span className={`text-sm font-bold ${getEngagementColor(avgEngagement)}`}>
+                {avgEngagement}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full transition-all ${
+                  avgEngagement >= 80 ? 'bg-green-500' : avgEngagement >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                }`}
+                style={{ width: `${avgEngagement}%` }}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Legend */}
         <div className="flex items-center gap-3 text-xs">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -111,11 +203,21 @@ function EngagementList({ students, onSelectStudent }) {
 
               {/* Looking at screen indicator */}
               {student.lookingAtScreen !== undefined && (
-                <div className="mt-2 flex items-center gap-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${student.lookingAtScreen ? 'bg-green-400' : 'bg-red-400'}`} />
+                <div className="mt-2 flex items-center gap-2">
+                  {student.lookingAtScreen ? (
+                    <Eye className="w-3 h-3 text-green-400" />
+                  ) : (
+                    <EyeOff className="w-3 h-3 text-red-400" />
+                  )}
                   <span className="text-[10px] text-gray-500">
                     {student.lookingAtScreen ? 'Looking at screen' : 'Not looking at screen'}
                   </span>
+                  {student.multipleFaces && (
+                    <span className="flex items-center gap-1 text-[10px] text-yellow-400">
+                      <AlertTriangle className="w-3 h-3" />
+                      Multiple faces
+                    </span>
+                  )}
                 </div>
               )}
             </div>
