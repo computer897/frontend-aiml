@@ -21,7 +21,7 @@ function ConsentModal({ onAccept, onDecline, classTitle }) {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content
         <div className="p-6">
           <div className="bg-gray-800/50 rounded-xl p-4 mb-6 space-y-3">
             <div className="flex items-center gap-3">
@@ -37,7 +37,7 @@ function ConsentModal({ onAccept, onDecline, classTitle }) {
           <p className="text-gray-500 text-xs mb-6 text-center">
             By joining, you agree to attendance monitoring for this class session.
           </p>
-
+                   */}
           {/* Action Buttons - Google Meet style */}
           <div className="flex flex-col sm:flex-row gap-3">
             <button
@@ -55,7 +55,7 @@ function ConsentModal({ onAccept, onDecline, classTitle }) {
           </div>
         </div>
       </div>
-    </div>
+  
   )
 }
 
