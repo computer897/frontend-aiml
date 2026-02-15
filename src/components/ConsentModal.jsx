@@ -39,7 +39,7 @@ function ConsentModal({ onAccept, onDecline, classTitle }) {
           </p>
 
           {/* Action Buttons - Google Meet style */}
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={onDecline}
               className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-full font-medium transition-all duration-200"
