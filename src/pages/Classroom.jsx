@@ -11,7 +11,7 @@ import { createFaceTracker, generateAttendanceMetadata, loadFaceDetectionModels 
 import EngagementList from '../components/EngagementList'
 import ChatPanel from '../components/ChatPanel'
 import DoubtsPanel from '../components/DoubtsPanel'
-import ConsentModal from '../components/ConsentModal'
+// import ConsentModal from '../components/ConsentModal'
 import AttendanceReportModal from '../components/AttendanceReportModal'
 
 // ─── Permission Dialog (Google Meet Style) ─────────────────────────────────
@@ -48,8 +48,8 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   const [stream, setStream] = useState(null)
   const [permissionState, setPermissionState] = useState('prompt')
   const [showPermissionDialog, setShowPermissionDialog] = useState(true)
-  const [showConsentModal, setShowConsentModal] = useState(false)
-  const [consentGiven, setConsentGiven] = useState(false)
+  // const [showConsentModal, setShowConsentModal] = useState(false)
+  // const [consentGiven, setConsentGiven] = useState(false)
   const [loading, setLoading] = useState(false)
   const videoRef = useRef(null)
 
@@ -109,25 +109,8 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   }, [])
 
   const handleJoin = () => {
-    // Students must consent to AI attendance tracking before joining
-    if (user?.role === 'student' && !consentGiven) {
-      setShowConsentModal(true)
-      return
-    }
-    onJoin({ micOn, videoOn, stream, consentGiven })
-  }
-
-  const handleConsentAccept = () => {
-    setConsentGiven(true)
-    setShowConsentModal(false)
-    // Auto-join after consent
-    onJoin({ micOn, videoOn, stream, consentGiven: true })
-  }
-
-  const handleConsentDecline = () => {
-    setShowConsentModal(false)
-    // Cannot join without consent - return to dashboard
-    onLeave()
+    // Consent logic removed; students join directly
+    onJoin({ micOn, videoOn, stream })
   }
 
   const showVideo = permissionState === 'granted' && videoOn
@@ -135,16 +118,6 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
       {showPermissionDialog && <PermissionDialog onAllow={requestPermissions} onDeny={denyPermissions} />}
-      
-      {/* Consent Modal for AI Attendance - Students only */}
-      {showConsentModal && user?.role === 'student' && (
-        <ConsentModal 
-          classTitle={classData.title}
-          onAccept={handleConsentAccept}
-          onDecline={handleConsentDecline}
-        />
-      )}
-
       <div className="max-w-4xl w-full">
         <div className="text-center mb-6">
           <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">{classData.title}</h1>
