@@ -118,104 +118,63 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
       {showPermissionDialog && <PermissionDialog onAllow={requestPermissions} onDeny={denyPermissions} />}
-      <div className="max-w-4xl w-full">
-        <div className="text-center mb-6">
-          <h1 className="text-white text-2xl sm:text-3xl font-bold mb-2">{classData.title}</h1>
-          <p className="text-gray-400">
-            {user?.role === 'teacher' ? 'You are the host' : `Hosted by ${classData.teacher_name}`}
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6 items-center">
-          {/* Video Preview */}
-          <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-video">
-            {/* Always render video element to maintain srcObject reference */}
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted 
-              className={`w-full h-full object-cover ${showVideo ? '' : 'hidden'}`} 
-              style={{ transform: 'scaleX(-1)' }} 
-            />
-            {/* Show avatar when video is off */}
-            {!showVideo && (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                <div className="w-24 h-24 bg-primary-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-3xl font-bold">
-                    {user?.name?.split(' ').map(n => n[0]).join('') || '?'}
-                  </span>
-                </div>
+      <div className="max-w-2xl w-full flex flex-col items-center justify-center">
+        {/* Video Preview Only */}
+        <div className="relative bg-gray-800 rounded-2xl overflow-hidden aspect-video w-full max-w-md mb-8">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className={`w-full h-full object-cover ${showVideo ? '' : 'hidden'}`} 
+            style={{ transform: 'scaleX(-1)' }} 
+          />
+          {!showVideo && (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+              <div className="w-24 h-24 bg-primary-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-3xl font-bold">
+                  {user?.name?.split(' ').map(n => n[0]).join('') || '?'}
+                </span>
               </div>
-            )}
-
-            {permissionState === 'denied' && (
-              <div className="absolute inset-0 bg-gray-900/90 flex items-center justify-center">
-                <div className="text-center p-4">
-                  <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-                  <p className="text-white font-medium mb-2">Camera access blocked</p>
-                  <p className="text-gray-400 text-sm">Click the camera icon in your browser&apos;s address bar to enable</p>
-                  <button onClick={requestPermissions} className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {permissionState === 'granted' && (
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
-                <button onClick={() => setMicOn(v => !v)} className={`p-3 rounded-full transition ${micOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`}>
-                  {micOn ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5 text-white" />}
+            </div>
+          )}
+          {permissionState === 'denied' && (
+            <div className="absolute inset-0 bg-gray-900/90 flex items-center justify-center">
+              <div className="text-center p-4">
+                <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+                <p className="text-white font-medium mb-2">Camera access blocked</p>
+                <p className="text-gray-400 text-sm">Click the camera icon in your browser&apos;s address bar to enable</p>
+                <button onClick={requestPermissions} className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
+                  Try Again
                 </button>
-                {/* Camera toggle is disabled for students — their camera must stay ON */}
-                {user?.role === 'teacher' ? (
-                  <button onClick={() => setVideoOn(v => !v)} className={`p-3 rounded-full transition ${videoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`}>
-                    {videoOn ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
-                  </button>
-                ) : (
-                  <button disabled title="Camera must stay ON for students" className="p-3 rounded-full bg-gray-600 opacity-50 cursor-not-allowed">
-                    <Video className="w-5 h-5 text-white" />
-                  </button>
-                )}
               </div>
-            )}
-          </div>
-
-          {/* Join Panel */}
-          <div className="bg-gray-800/50 rounded-2xl p-6 sm:p-8 border border-gray-700">
-            <h2 className="text-white text-xl font-semibold mb-2">Ready to join?</h2>
-            <p className="text-gray-400 text-sm mb-6">
-              {user?.role === 'teacher'
-                ? 'Students will be able to join once you start the meeting.'
-                : 'Your teacher will be notified when you join.'}
-            </p>
-
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-3 text-sm">
-                <div className={`w-2 h-2 rounded-full ${micOn ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-gray-300">{micOn ? 'Microphone is on' : 'Microphone is off'}</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <div className={`w-2 h-2 rounded-full ${videoOn ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-gray-300">{videoOn ? 'Camera is on' : 'Camera is off'}</span>
-              </div>
-              {user?.role === 'teacher' && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Shield className="w-4 h-4 text-primary-400" />
-                  <span className="text-gray-300">You have host controls</span>
-                </div>
+            </div>
+          )}
+          {permissionState === 'granted' && (
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
+              <button onClick={() => setMicOn(v => !v)} className={`p-3 rounded-full transition ${micOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`}>
+                {micOn ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5 text-white" />}
+              </button>
+              {user?.role === 'teacher' ? (
+                <button onClick={() => setVideoOn(v => !v)} className={`p-3 rounded-full transition ${videoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'}`}>
+                  {videoOn ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
+                </button>
+              ) : (
+                <button disabled title="Camera must stay ON for students" className="p-3 rounded-full bg-gray-600 opacity-50 cursor-not-allowed">
+                  <Video className="w-5 h-5 text-white" />
+                </button>
               )}
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button onClick={handleJoin} disabled={loading} className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-semibold disabled:opacity-50">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : user?.role === 'teacher' ? 'Start Meeting' : 'Join Now'}
-              </button>
-              <button onClick={onLeave} className="px-6 py-3 bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition font-medium">
-                Cancel
-              </button>
-            </div>
-          </div>
+          )}
+        </div>
+        {/* Simple Join/Cancel Buttons */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
+          <button onClick={handleJoin} disabled={loading} className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-semibold disabled:opacity-50">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : user?.role === 'teacher' ? 'Start Meeting' : 'Join Now'}
+          </button>
+          <button onClick={onLeave} className="px-6 py-3 bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition font-medium">
+            Cancel
+          </button>
         </div>
       </div>
     </div>
