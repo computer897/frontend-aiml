@@ -13,6 +13,7 @@ import ChatPanel from '../components/ChatPanel'
 import DoubtsPanel from '../components/DoubtsPanel'
 // import ConsentModal from '../components/ConsentModal'
 import AttendanceReportModal from '../components/AttendanceReportModal'
+import { useEngagementDetection } from '../hooks/useEngagementDetection'
 
 // ─── Permission Dialog (Google Meet Style) ─────────────────────────────────
 function PermissionDialog({ onAllow, onDeny }) {
@@ -783,7 +784,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   // Track A: WebRTC video (visible to others) - controlled by videoOn
   // Track B: Local attendance video (internal) - keeps running for attendance
   const [attendanceStreamActive, setAttendanceStreamActive] = useState(false)
-  const consentGiven = initialSettings?.consentGiven ?? false
+  // Camera is mandatory for students — treat as consented automatically
+  const consentGiven = user?.role === 'student' ? true : (initialSettings?.consentGiven ?? false)
+
+  // Track whether this student has been approved into the room
+  const [isStudentApproved, setIsStudentApproved] = useState(user?.role === 'teacher')
 
   // Waiting room states - Students start in waiting state by default
   const [waitingForApproval, setWaitingForApproval] = useState(user?.role === 'student')
@@ -806,6 +811,17 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const wsRef = useRef(null)
   const faceTrackerRef = useRef(null) // Face detection tracker
   const webrtcRef = useRef(null)
+
+  // ── Real-time engagement detection hook (students only) ──────────────────
+  // Runs face detection every 3 seconds when the student is approved.
+  // Sends engagement status to the signaling server → forwarded to teacher.
+  const { faceDetected: engagementFaceDetected } = useEngagementDetection({
+    videoRef: localVideoRef,
+    webrtcRef,
+    userId: user?.id || user?._id,
+    userName: user?.name,
+    isActive: user?.role === 'student' && isStudentApproved,
+  })
 
   // ── Initialize media and WebRTC ──
   useEffect(() => {
@@ -1006,6 +1022,8 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         console.log('[Classroom] Join approved!')
         setWaitingForApproval(false)
         setJoinRejected(false)
+        // Activate the engagement detection hook
+        setIsStudentApproved(true)
         // Start attendance and face tracking after approval (student with consent)
         if (user?.role === 'student' && consentGiven) {
           const newSessionId = `${classData.class_id}_${Date.now()}`
@@ -1050,19 +1068,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                 // Update local state for UI feedback
                 setLastDetection(detection)
 
-                // Send real-time engagement status to teacher via socket.io
-                if (webrtcRef.current) {
-                  const engagementStatus = detection.faceDetected
-                    ? (detection.multipleFaces ? 'distracted' : 'attentive')
-                    : 'not-detected'
-                  webrtcRef.current.sendEngagementUpdate(
-                    user?.id || user?._id,
-                    engagementStatus,
-                    user?.name,
-                    true // camera is always on for students
-                  )
-                }
-                
+                // NOTE: socket engagement is handled by useEngagementDetection hook
                 // Send only metadata to backend
                 try {
                   await attendanceAPI.submitMetadata(metadata)
@@ -1422,7 +1428,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
           
           {/* Hidden video element for attendance tracking (separate from WebRTC) */}
-          {user?.role === 'student' && consentGiven && (
+          {user?.role === 'student' && (
             <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" />
           )}
           
