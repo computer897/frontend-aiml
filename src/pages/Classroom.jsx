@@ -543,9 +543,10 @@ function VideoTile({ stream, muted, mirrored, name, role, isLocal, videoOn, size
   const videoRef = useRef(null)
   const showVideo = stream && videoOn === true
 
+  // Always attach stream for audio playback — never detach based on video toggle
   useEffect(() => {
     if (!videoRef.current) return
-    if (stream && showVideo) {
+    if (stream) {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream
         videoRef.current.play().catch(() => {})
@@ -555,7 +556,7 @@ function VideoTile({ stream, muted, mirrored, name, role, isLocal, videoOn, size
         videoRef.current.srcObject = null
       }
     }
-  }, [stream, showVideo])
+  }, [stream])
 
   const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?'
   const isSmall = size === 'small'
@@ -566,8 +567,8 @@ function VideoTile({ stream, muted, mirrored, name, role, isLocal, videoOn, size
         ref={videoRef}
         autoPlay
         playsInline
-        muted={muted}
-        className={`absolute inset-0 w-full h-full object-cover ${showVideo ? '' : 'hidden'}`}
+        muted
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0'}`}
         style={mirrored ? { transform: 'scaleX(-1)' } : undefined}
       />
       {!showVideo && (
@@ -589,12 +590,65 @@ function VideoTile({ stream, muted, mirrored, name, role, isLocal, videoOn, size
   )
 }
 
+// Ensures audio always plays for all remote participants regardless of video state
+function RemoteAudioPlayer({ remoteStreams }) {
+  const audioRefs = useRef({})
+
+  useEffect(() => {
+    // Attach or update audio elements for each remote stream
+    Object.entries(remoteStreams).forEach(([socketId, { stream }]) => {
+      if (!stream) return
+      const audioTracks = stream.getAudioTracks()
+      if (audioTracks.length === 0) return
+
+      let audio = audioRefs.current[socketId]
+      if (!audio) {
+        audio = document.createElement('audio')
+        audio.autoplay = true
+        audio.playsInline = true
+        audioRefs.current[socketId] = audio
+      }
+      if (audio.srcObject !== stream) {
+        audio.srcObject = stream
+        audio.play().catch(() => {})
+      }
+    })
+
+    // Remove audio elements for disconnected peers
+    Object.keys(audioRefs.current).forEach(socketId => {
+      if (!remoteStreams[socketId]) {
+        const audio = audioRefs.current[socketId]
+        if (audio) {
+          audio.srcObject = null
+          audio.remove()
+        }
+        delete audioRefs.current[socketId]
+      }
+    })
+  }, [remoteStreams])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(audioRefs.current).forEach(audio => {
+        if (audio) {
+          audio.srcObject = null
+          audio.remove()
+        }
+      })
+      audioRefs.current = {}
+    }
+  }, [])
+
+  return null
+}
+
 // ─── Google Meet-style Video Grid ────────────────────────────────────────────
 // Layout: Teacher video is ALWAYS the main large video.
-// Student videos appear as small tiles only when their camera is ON.
-// If a student turns camera OFF → their tile is removed from the grid.
-// If all students have camera OFF → only teacher video is shown.
+// All remote students appear as small tiles (avatar shown when camera is off).
+// Local student sees self-view PIP in corner (Google Meet style).
 // Teacher video is always visible (with avatar if camera off).
+// Audio always plays for all participants regardless of camera state.
 function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef }) {
   // Build participants: separate teacher (main) from student tiles
   const buildParticipants = () => {
@@ -618,12 +672,8 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
     if (isTeacher) {
       teacherParticipant = localP
-    } else {
-      // Local student: add to tiles only if camera is on
-      if (localVideoOn) {
-        studentParticipants.push(localP)
-      }
     }
+    // Local student: rendered as self-view PIP (not in grid)
 
     // Remote participants
     Object.entries(remoteStreams).forEach(([socketId, { stream, userInfo }]) => {
@@ -645,10 +695,8 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       if (remoteRole === 'teacher') {
         teacherParticipant = p
       } else {
-        // Students only appear in the grid if camera is ON
-        if (remoteCamOn) {
-          studentParticipants.push(p)
-        }
+        // Show all remote students — avatar when camera off, audio always plays
+        studentParticipants.push(p)
       }
     })
 
@@ -670,6 +718,9 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
   return (
     <div className="w-full h-full flex flex-col p-1.5 sm:p-2 relative overflow-hidden">
+      {/* Hidden audio players — ensures all remote audio always plays */}
+      <RemoteAudioPlayer remoteStreams={remoteStreams} />
+      
       {/* MAIN VIDEO — Teacher always occupies main area */}
       <div className={`flex-1 min-h-0 ${hasStudents ? 'mb-1.5 sm:mb-2' : ''}`}>
         {teacherParticipant ? (
@@ -698,7 +749,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
         {teacherParticipant?.isLocal && <canvas ref={canvasRef} className="hidden" />}
       </div>
 
-      {/* STUDENT VIDEO GRID — Small tiles, only shown when camera is ON */}
+      {/* STUDENT VIDEO GRID — Small tiles for all participants */}
       {hasStudents && (
         <div className="flex-shrink-0 w-full">
           {/* Mobile: horizontal scroll strip */}
@@ -716,7 +767,6 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
                   videoOn={p.videoOn}
                   size="small"
                 />
-                {p.isLocal && <canvas ref={canvasRef} className="hidden" />}
               </div>
             ))}
           </div>
@@ -735,11 +785,30 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
                   videoOn={p.videoOn}
                   size="small"
                 />
-                {p.isLocal && <canvas ref={canvasRef} className="hidden" />}
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {/* Self-view PIP for students (Google Meet style) */}
+      {user?.role !== 'teacher' && (
+        <>
+          <div className="absolute bottom-20 right-3 z-10 w-36 h-28 sm:w-48 sm:h-36 rounded-xl overflow-hidden shadow-2xl border-2 border-gray-600/50 hover:border-gray-500 transition-colors">
+            <VideoTile
+              stream={localStream}
+              muted={true}
+              mirrored={true}
+              name={user?.name}
+              role={user?.role}
+              isLocal={true}
+              videoOn={localVideoOn}
+              micOn={localMicOn}
+              size="small"
+            />
+          </div>
+          <canvas ref={canvasRef} className="hidden" />
+        </>
       )}
 
       {/* Empty state — only local user, no remotes */}

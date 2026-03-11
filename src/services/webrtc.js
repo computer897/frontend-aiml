@@ -219,7 +219,10 @@ export function createWebRTCManager() {
       const pc = createPeerConnection(data.from, false, userInfo)
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer))
-        const answer = await pc.createAnswer()
+        const answer = await pc.createAnswer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        })
         await pc.setLocalDescription(answer)
         socket.emit('answer', { to: data.from, answer })
       } catch (error) {
@@ -354,21 +357,44 @@ export function createWebRTCManager() {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
     peers[socketId] = pc
 
-    // Add local tracks
+    // Add local tracks (audio + video)
     if (localStream) {
       localStream.getTracks().forEach(track => {
+        console.log(`[WebRTC] Adding local ${track.kind} track to peer ${socketId}, enabled:`, track.enabled)
         pc.addTrack(track, localStream)
       })
     }
 
-    // Handle incoming remote tracks
+    // Ensure bidirectional audio/video transceivers exist
+    // This guarantees both sides can send AND receive audio even if
+    // one side doesn't have a local track yet
+    const transceiverKinds = pc.getTransceivers().map(t => t.receiver?.track?.kind)
+    if (!transceiverKinds.includes('audio')) {
+      try { pc.addTransceiver('audio', { direction: 'sendrecv' }) } catch (e) { /* already added via addTrack */ }
+    }
+    if (!transceiverKinds.includes('video')) {
+      try { pc.addTransceiver('video', { direction: 'sendrecv' }) } catch (e) { /* already added via addTrack */ }
+    }
+
+    // Handle incoming remote tracks — merge audio+video into single stream per peer
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Remote track from:', socketId, 'kind:', event.track.kind)
-      const stream = event.streams[0]
-      if (stream) {
-        remoteStreams[socketId] = stream
-        callbacks.onRemoteStream?.(socketId, stream, userInfo)
+      console.log('[WebRTC] Remote track from:', socketId, 'kind:', event.track.kind, 'enabled:', event.track.enabled)
+      
+      // Get or create the stream for this peer
+      let peerStream = remoteStreams[socketId]
+      if (!peerStream) {
+        peerStream = event.streams[0] || new MediaStream()
+        remoteStreams[socketId] = peerStream
       }
+      
+      // Add track if not already present
+      const existing = peerStream.getTracks().find(t => t.id === event.track.id)
+      if (!existing) {
+        peerStream.addTrack(event.track)
+      }
+      
+      // Always notify UI so it can re-render with updated tracks
+      callbacks.onRemoteStream?.(socketId, peerStream, userInfo)
     }
 
     // Handle ICE candidates
@@ -396,7 +422,11 @@ export function createWebRTCManager() {
 
     // Initiator (teacher) creates and sends offer
     if (initiator) {
-      pc.createOffer()
+      // Ensure audio and video are properly negotiated
+      pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      })
         .then(offer => pc.setLocalDescription(offer))
         .then(() => {
           socket.emit('offer', {
