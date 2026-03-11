@@ -124,6 +124,40 @@ export const classAPI = {
   },
 }
 
+// Document APIs
+export const documentAPI = {
+  getByClass: async (classId) => {
+    return apiRequest(`/documents/class/${classId}`)
+  },
+
+  upload: async (classId, title, description, fileUrl, fileName, fileType, fileSize) => {
+    return apiRequest('/documents', {
+      method: 'POST',
+      body: JSON.stringify({
+        class_id: classId,
+        title,
+        description,
+        file_url: fileUrl,
+        file_name: fileName,
+        file_type: fileType,
+        file_size: fileSize,
+      }),
+    })
+  },
+
+  delete: async (documentId) => {
+    return apiRequest(`/documents/${documentId}`, {
+      method: 'DELETE',
+    })
+  },
+
+  markViewed: async (documentId) => {
+    return apiRequest(`/documents/${documentId}/view`, {
+      method: 'POST',
+    })
+  },
+}
+
 // Announcement APIs
 export const announcementAPI = {
   getByClass: async (classId) => {
