@@ -124,6 +124,30 @@ export const classAPI = {
   },
 }
 
+// Announcement APIs
+export const announcementAPI = {
+  getByClass: async (classId) => {
+    return apiRequest(`/announcements/class/${classId}`)
+  },
+
+  create: async (classId, title, content, priority = 'normal') => {
+    return apiRequest('/announcements', {
+      method: 'POST',
+      body: JSON.stringify({ class_id: classId, title, content, priority }),
+    })
+  },
+
+  delete: async (announcementId) => {
+    return apiRequest(`/announcements/${announcementId}`, {
+      method: 'DELETE',
+    })
+  },
+
+  getSeenBy: async (announcementId) => {
+    return apiRequest(`/announcements/${announcementId}/seen`)
+  },
+}
+
 // Attendance APIs
 export const attendanceAPI = {
   start: async (classId) => {
