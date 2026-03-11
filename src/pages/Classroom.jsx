@@ -544,18 +544,23 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
   const showVideo = stream && videoOn === true
 
   useEffect(() => {
-    if (!videoRef.current) return
+    const el = videoRef.current
+    if (!el) return
     if (stream) {
-      if (videoRef.current.srcObject !== stream) {
-        videoRef.current.srcObject = stream
-        videoRef.current.play().catch(() => {})
+      if (el.srcObject !== stream) {
+        el.srcObject = stream
+        // Log audio track state for debugging
+        const audioTracks = stream.getAudioTracks()
+        console.log(`[VideoTile] ${isLocal ? 'LOCAL' : 'REMOTE'} (${name}) stream attached — audio tracks:`, audioTracks.length, audioTracks.map(t => ({ id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState })))
+        console.log(`[VideoTile] <video> element muted=${isLocal} for ${name}`)
+        el.play().catch(err => console.warn(`[VideoTile] play() failed for ${name}:`, err))
       }
     } else {
-      if (videoRef.current.srcObject) {
-        videoRef.current.srcObject = null
+      if (el.srcObject) {
+        el.srcObject = null
       }
     }
-  }, [stream])
+  }, [stream, isLocal, name])
 
   const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?'
   const isSmall = size === 'small'
@@ -565,7 +570,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
 
   return (
     <div className="relative w-full h-full bg-gray-900 rounded-xl overflow-hidden group transition-all duration-300">
-      {/* Video element — always muted, audio handled separately */}
+      {/* Video element — muted ONLY for local preview (isLocal), unmuted for remote so audio plays */}
       <video
         ref={videoRef}
         autoPlay
@@ -602,31 +607,50 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
 
 // ─── Remote Audio Player ─────────────────────────────────────────────────────
 // Dedicated <audio> elements for each remote peer — guarantees audio playback
+// Elements MUST be appended to the DOM for autoplay to work in all browsers.
 function RemoteAudioPlayer({ remoteStreams }) {
   const audioRefs = useRef({})
+  const containerRef = useRef(null)
 
   useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
     Object.entries(remoteStreams).forEach(([socketId, { stream }]) => {
       if (!stream) return
-      if (stream.getAudioTracks().length === 0) return
+      const audioTracks = stream.getAudioTracks()
+      console.log(`[RemoteAudioPlayer] Peer ${socketId} — audio tracks:`, audioTracks.length, audioTracks.map(t => ({ id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState })))
+      if (audioTracks.length === 0) return
 
       let audio = audioRefs.current[socketId]
       if (!audio) {
         audio = document.createElement('audio')
         audio.autoplay = true
         audio.playsInline = true
+        // Append to DOM — required for autoplay in some browsers
+        container.appendChild(audio)
         audioRefs.current[socketId] = audio
+        console.log(`[RemoteAudioPlayer] Created <audio> element for peer ${socketId}`)
       }
       if (audio.srcObject !== stream) {
         audio.srcObject = stream
-        audio.play().catch(() => {})
+        audio.play().then(() => {
+          console.log(`[RemoteAudioPlayer] Audio playing for peer ${socketId}`)
+        }).catch(err => {
+          console.warn(`[RemoteAudioPlayer] play() failed for peer ${socketId}:`, err)
+        })
       }
     })
 
+    // Cleanup removed peers
     Object.keys(audioRefs.current).forEach(socketId => {
       if (!remoteStreams[socketId]) {
         const audio = audioRefs.current[socketId]
-        if (audio) { audio.srcObject = null; audio.remove() }
+        if (audio) {
+          audio.srcObject = null
+          audio.remove()
+          console.log(`[RemoteAudioPlayer] Removed <audio> element for peer ${socketId}`)
+        }
         delete audioRefs.current[socketId]
       }
     })
@@ -639,7 +663,8 @@ function RemoteAudioPlayer({ remoteStreams }) {
     }
   }, [])
 
-  return null
+  // Hidden container div so audio elements are in the DOM
+  return <div ref={containerRef} style={{ display: 'none' }} />
 }
 
 // ─── Google Meet Video Grid ─────────────────────────────────────────────────
@@ -1104,6 +1129,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         const initVideo = initialSettings?.videoOn ?? true
         stream.getAudioTracks().forEach(t => { t.enabled = initMic })
         stream.getVideoTracks().forEach(t => { t.enabled = initVideo })
+        // Debug: log local stream tracks before passing to WebRTC
+        console.log('[Classroom] Local stream ready — audio tracks:', stream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })))
+        console.log('[Classroom] Local stream ready — video tracks:', stream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })))
       }
 
       // Create fresh WebRTC manager for this session
@@ -1117,7 +1145,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       }
 
       rtc.callbacks.onRemoteStream = (socketId, remoteStream, userInfo) => {
-        console.log('Remote stream received:', socketId, userInfo)
+        console.log('[Classroom] Remote stream received:', socketId, userInfo)
+        console.log('[Classroom] Remote stream audio tracks:', remoteStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState })))
+        console.log('[Classroom] Remote stream video tracks:', remoteStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState })))
         setRemoteStreams(prev => ({
           ...prev,
           [socketId]: { stream: remoteStream, userInfo: { ...userInfo, role: userInfo?.role || 'student' } }

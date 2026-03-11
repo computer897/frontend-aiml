@@ -360,25 +360,42 @@ export function createWebRTCManager() {
     // Add local tracks (audio + video)
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        console.log(`[WebRTC] Adding local ${track.kind} track to peer ${socketId}, enabled:`, track.enabled)
+        console.log(`[WebRTC] Adding local ${track.kind} track to peer ${socketId}, enabled:`, track.enabled, 'readyState:', track.readyState)
         pc.addTrack(track, localStream)
       })
+    } else {
+      console.warn(`[WebRTC] No local stream when creating peer ${socketId}!`)
     }
 
-    // Ensure bidirectional audio/video transceivers exist
-    // This guarantees both sides can send AND receive audio even if
-    // one side doesn't have a local track yet
-    const transceiverKinds = pc.getTransceivers().map(t => t.receiver?.track?.kind)
-    if (!transceiverKinds.includes('audio')) {
-      try { pc.addTransceiver('audio', { direction: 'sendrecv' }) } catch (e) { /* already added via addTrack */ }
+    // Ensure bidirectional audio/video transceivers exist.
+    // addTrack already creates transceivers, so only add if genuinely missing.
+    const existingKinds = pc.getTransceivers().map(t => t.sender?.track?.kind || t.receiver?.track?.kind)
+    if (!existingKinds.includes('audio')) {
+      try {
+        pc.addTransceiver('audio', { direction: 'sendrecv' })
+        console.log(`[WebRTC] Added audio transceiver for peer ${socketId}`)
+      } catch (e) { /* already exists */ }
     }
-    if (!transceiverKinds.includes('video')) {
-      try { pc.addTransceiver('video', { direction: 'sendrecv' }) } catch (e) { /* already added via addTrack */ }
+    if (!existingKinds.includes('video')) {
+      try {
+        pc.addTransceiver('video', { direction: 'sendrecv' })
+        console.log(`[WebRTC] Added video transceiver for peer ${socketId}`)
+      } catch (e) { /* already exists */ }
     }
+
+    // Log all transceivers for debugging
+    console.log(`[WebRTC] Transceivers for peer ${socketId}:`, pc.getTransceivers().map(t => ({
+      mid: t.mid,
+      direction: t.direction,
+      currentDirection: t.currentDirection,
+      senderKind: t.sender?.track?.kind,
+      senderEnabled: t.sender?.track?.enabled,
+      receiverKind: t.receiver?.track?.kind,
+    })))
 
     // Handle incoming remote tracks — merge audio+video into single stream per peer
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Remote track from:', socketId, 'kind:', event.track.kind, 'enabled:', event.track.enabled)
+      console.log(`[WebRTC] ▶ Remote track from: ${socketId}, kind: ${event.track.kind}, enabled: ${event.track.enabled}, muted: ${event.track.muted}, readyState: ${event.track.readyState}`)
       
       // Get or create the stream for this peer
       let peerStream = remoteStreams[socketId]
@@ -391,6 +408,14 @@ export function createWebRTCManager() {
       const existing = peerStream.getTracks().find(t => t.id === event.track.id)
       if (!existing) {
         peerStream.addTrack(event.track)
+        console.log(`[WebRTC] Added ${event.track.kind} track to peer stream for ${socketId}. Stream now has: audio=${peerStream.getAudioTracks().length} video=${peerStream.getVideoTracks().length}`)
+      }
+
+      // Listen for track unmute (important — tracks can start muted until media flows)
+      event.track.onunmute = () => {
+        console.log(`[WebRTC] Track unmuted: ${event.track.kind} from ${socketId}`)
+        // Re-notify UI so it can update
+        callbacks.onRemoteStream?.(socketId, peerStream, userInfo)
       }
       
       // Always notify UI so it can re-render with updated tracks
