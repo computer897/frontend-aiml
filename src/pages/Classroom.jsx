@@ -539,7 +539,7 @@ function RemovedBanner({ onLeave }) {
 }
 
 // ─── Video Tile (Reusable) ───────────────────────────────────────────────────
-function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn }) {
+function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn, mirror = isLocal }) {
   const videoRef = useRef(null)
   const showVideo = stream && videoOn === true
 
@@ -577,7 +577,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
         playsInline
         muted={isLocal}
         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        style={isLocal ? { transform: 'scaleX(-1)' } : undefined}
+        style={mirror ? { transform: 'scaleX(-1)' } : undefined}
       />
       {/* Avatar fallback when camera is off */}
       {!showVideo && (
@@ -675,7 +675,7 @@ function RemoteAudioPlayer({ remoteStreams }) {
 // 4. SCREEN SHARE      (teacher sharing screen) → main screen + thumbnail row
 // 5. CAMERA OFF        → tile removed from visible grid, audio still plays
 // 6. MOBILE            → teacher fullscreen + horizontal scroll thumbnails
-function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing }) {
+function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing, screenShareStream }) {
   // ─── Build sorted participant list (teacher first) ───
   const buildParticipants = () => {
     const isTeacher = user?.role === 'teacher'
@@ -731,15 +731,22 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
   // ─── Grid column calculation for multi-user layout ───
   const getGridStyle = (count) => {
-    if (count <= 2) return { gridTemplateColumns: 'repeat(2, 1fr)' }
+    if (count <= 1) return { gridTemplateColumns: 'repeat(1, 1fr)' }
+    if (count === 2) return { gridTemplateColumns: 'repeat(2, 1fr)' }
     if (count <= 4) return { gridTemplateColumns: 'repeat(2, 1fr)' }
     if (count <= 6) return { gridTemplateColumns: 'repeat(3, 1fr)' }
-    if (count <= 9) return { gridTemplateColumns: 'repeat(3, 1fr)' }
-    return { gridTemplateColumns: 'repeat(4, 1fr)' }
+    return { gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }
   }
 
   // ─── Students with camera ON (for bottom thumbnails) ───
   const studentsWithCamera = students.filter(s => s.videoOn)
+  const presentingStream = teacher?.isLocal && screenShareStream ? screenShareStream : teacher?.stream
+  const showTeacherCameraThumbnail = Boolean(
+    layoutMode === 'screen-share' &&
+    teacher?.isLocal &&
+    screenShareStream &&
+    localVideoOn
+  )
 
   return (
     <div className="w-full h-full flex flex-col relative overflow-hidden">
@@ -757,13 +764,14 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
             {teacher && (
               <div className="w-full h-full rounded-xl overflow-hidden relative">
                 <VideoTile
-                  stream={teacher.stream}
+                  stream={presentingStream}
                   name={teacher.name}
                   role="teacher"
                   isLocal={teacher.isLocal}
-                  videoOn={teacher.videoOn}
+                  videoOn={true}
                   micOn={teacher.micOn}
                   size="normal"
+                  mirror={false}
                 />
                 <div className="absolute top-2 right-2 px-2 py-1 bg-red-600/90 backdrop-blur-sm rounded-md text-white text-[10px] sm:text-xs font-semibold flex items-center gap-1">
                   <Monitor className="w-3 h-3" /> Presenting
@@ -773,10 +781,23 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
             {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
           </div>
           {/* Bottom thumbnail row */}
-          {students.length > 0 && (
+          {(studentsWithCamera.length > 0 || showTeacherCameraThumbnail) && (
             <div className="flex-shrink-0 px-1.5 pb-1.5 sm:px-2 sm:pb-2">
               <div className="flex gap-1.5 overflow-x-auto py-1"
                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {showTeacherCameraThumbnail && (
+                  <div className="flex-shrink-0 w-24 h-16 sm:w-36 sm:h-24 rounded-lg overflow-hidden border border-purple-500/40">
+                    <VideoTile
+                      stream={localStream}
+                      name={teacher.name}
+                      role="teacher"
+                      isLocal={true}
+                      videoOn={localVideoOn}
+                      micOn={localMicOn}
+                      size="small"
+                    />
+                  </div>
+                )}
                 {students.filter(s => s.videoOn).map(p => (
                   <div key={p.key} className="flex-shrink-0 w-24 h-16 sm:w-36 sm:h-24 rounded-lg overflow-hidden">
                     <VideoTile stream={p.stream} name={p.name} role={p.role} isLocal={p.isLocal} videoOn={p.videoOn} micOn={p.micOn} size="small" />
@@ -1033,6 +1054,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const [micOn, setMicOn] = useState(initialSettings?.micOn ?? false)
   const [videoOn, setVideoOn] = useState(initialSettings?.videoOn ?? false)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [screenShareStream, setScreenShareStream] = useState(null)
   const [screenShareBlockedMsg, setScreenShareBlockedMsg] = useState('')
   const [showChat, setShowChat] = useState(false)
   const [showEngagement, setShowEngagement] = useState(false)
@@ -1210,6 +1232,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
       rtc.callbacks.onScreenShareStopped = () => {
         setIsScreenSharing(false)
+        setScreenShareStream(null)
+      }
+
+      rtc.callbacks.onScreenShare = (_socketId, _stream, data) => {
+        if (data?.socketId) {
+          setIsScreenSharing(true)
+        }
       }
 
       rtc.callbacks.onHandRaised = (data) => {
@@ -1634,9 +1663,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     if (isScreenSharing) {
       webrtcRef.current.stopScreenShare()
       setIsScreenSharing(false)
+      setScreenShareStream(null)
     } else {
       const result = await webrtcRef.current.startScreenShare()
-      if (result) setIsScreenSharing(true)
+      if (result) {
+        setScreenShareStream(result)
+        setIsScreenSharing(true)
+      }
     }
   }
 
@@ -1791,6 +1824,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
             user={user}
             canvasRef={canvasRef}
             isScreenSharing={isScreenSharing}
+            screenShareStream={screenShareStream}
           />
 
           {/* ── Bottom Controls (Google Meet style) ── */}
@@ -1835,7 +1869,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                 {user?.role === 'teacher' && (
                   <button
                     onClick={handleScreenShare}
-                    className={`p-3 sm:p-4 rounded-full transition hidden sm:block ${isScreenSharing ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                    className={`p-3 sm:p-4 rounded-full transition ${isScreenSharing ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-700 hover:bg-gray-600'}`}
                     title={isScreenSharing ? 'Stop presenting' : 'Present now'}
                   >
                     <MonitorUp className="w-5 h-5 sm:w-6 sm:h-6 text-white" />

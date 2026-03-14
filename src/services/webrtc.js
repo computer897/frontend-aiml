@@ -281,6 +281,7 @@ export function createWebRTCManager() {
     // Screen share started by someone
     socket.on('screen-share-started', (data) => {
       console.log('[WebRTC] Screen share started by:', data.socketId)
+      callbacks.onScreenShare?.(data.socketId, null, data)
     })
 
     // Screen share stopped by someone
