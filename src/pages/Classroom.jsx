@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Phone,
   HelpCircle, Users, Monitor, Loader2, Clock,
@@ -1040,7 +1040,7 @@ function ParticipantsPanel({ participants, user, onMuteUser, onRemoveUser }) {
 }
 
 // ─── Live Classroom ─────────────────────────────────────────────────────────
-function LiveClassroom({ classData, user, onLeave, initialSettings }) {
+function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessionId }) {
   const [micOn, setMicOn] = useState(initialSettings?.micOn ?? false)
   const [videoOn, setVideoOn] = useState(initialSettings?.videoOn ?? false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -1102,6 +1102,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const faceTrackerRef = useRef(null) // Face detection tracker
   const webrtcRef = useRef(null)
   const classroomRef = useRef(null)
+
+  useEffect(() => {
+    const activeSessionId = classData?.active_session_id || initialSessionId
+    if (!sessionId && activeSessionId) {
+      setSessionId(activeSessionId)
+    }
+  }, [classData?.active_session_id, initialSessionId, sessionId])
 
   // ── Real-time engagement detection hook (students only) ──────────────────
   // Runs face detection every 3 seconds when the student is approved.
@@ -1312,10 +1319,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       }
 
       // Class ended – show attendance report to teacher
-      rtc.callbacks.onClassEnded = (data) => {
-        setAttendanceReport(data)
-        setShowAttendanceReport(true)
-      }
+      rtc.callbacks.onClassEnded = () => {}
 
       // Remote participant toggled camera visibility
       rtc.callbacks.onCameraStatus = (data) => {
@@ -1353,15 +1357,23 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         setIsStudentApproved(true)
         // Start attendance and face tracking after approval (student with consent)
         if (user?.role === 'student' && consentGiven) {
-          const newSessionId = `${classData.class_id}_${Date.now()}`
-          setSessionId(newSessionId)
+          const activeSessionId = classData?.active_session_id || initialSessionId
+          if (!activeSessionId) {
+            console.error('Missing active session ID for class attendance tracking')
+            return
+          }
+          setSessionId(activeSessionId)
           
           // Start attendance session on backend
-          attendanceAPI.start(classData.class_id, newSessionId)
+          attendanceAPI.start(classData.class_id, activeSessionId, {
+            classTitle: classData?.title,
+            teacherName: classData?.teacher_name,
+            startedAt: classData?.session_started_at,
+          })
             .then(() => {
               console.log('[Classroom] Attendance session started')
               // Initialize face tracking
-              initializeFaceTracking(newSessionId)
+              initializeFaceTracking(activeSessionId)
             })
             .catch(err => console.error('Failed to start attendance:', err))
         }
@@ -1442,7 +1454,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
                 console.error('[FaceTracking] Failed to submit metadata:', err)
               }
             },
-            3000
+            5000
           )
 
           faceTrackerRef.current = tracker
@@ -1623,11 +1635,28 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const handleEndClass = async () => {
     if (user?.role !== 'teacher') return
     if (!window.confirm('End the class for everyone? This will finalize attendance.')) return
-    // Emit end-class – server will send back class-ended with the attendance report
+    const activeSessionId = sessionId || classData?.active_session_id || initialSessionId
+    if (!activeSessionId) {
+      alert('Active session information is missing for this class.')
+      return
+    }
+
+    try {
+      const report = await attendanceAPI.end({
+        classId: classData.class_id,
+        sessionId: activeSessionId,
+        endedAt: new Date().toISOString(),
+      })
+      setAttendanceReport(report)
+      setShowAttendanceReport(true)
+    } catch (error) {
+      alert(error.message || 'Failed to finalize attendance report')
+      return
+    }
+
     if (webrtcRef.current && typeof webrtcRef.current.endClass === 'function') {
       webrtcRef.current.endClass()
     }
-    // Deactivate class on the backend API
     try { await classAPI.deactivate(classData.class_id) } catch { /* ok */ }
   }
 
@@ -1782,9 +1811,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       {/* Attendance Report Modal (teacher sees this after ending class) */}
       {showAttendanceReport && user?.role === 'teacher' && (
         <AttendanceReportModal
-          report={attendanceReport?.attendance || []}
-          endTime={attendanceReport?.endTime}
+          report={attendanceReport?.attendance_records || []}
+          endTime={attendanceReport?.ended_at}
           classTitle={classData?.title}
+          classId={classData?.class_id}
+          sessionId={attendanceReport?.session_id || sessionId}
           onClose={() => {
             setShowAttendanceReport(false)
             onLeave()
@@ -2079,6 +2110,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 function Classroom({ user }) {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [classData, setClassData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isLive, setIsLive] = useState(false)
@@ -2142,7 +2174,7 @@ function Classroom({ user }) {
     if (!hasJoined) {
       return <PreJoinScreen classData={classData} user={user} onJoin={handleJoin} onLeave={handleLeave} />
     }
-    return <LiveClassroom classData={classData} user={user} onLeave={handleLeave} initialSettings={joinSettings} />
+    return <LiveClassroom classData={classData} user={user} onLeave={handleLeave} initialSettings={joinSettings} initialSessionId={location.state?.sessionId} />
   }
 
   // Student flow: WaitingRoom (if not live) -> PreJoin -> LiveClassroom
@@ -2154,7 +2186,7 @@ function Classroom({ user }) {
     return <PreJoinScreen classData={classData} user={user} onJoin={handleJoin} onLeave={handleLeave} />
   }
 
-  return <LiveClassroom classData={classData} user={user} onLeave={handleLeave} initialSettings={joinSettings} />
+  return <LiveClassroom classData={classData} user={user} onLeave={handleLeave} initialSettings={joinSettings} initialSessionId={location.state?.sessionId} />
 }
 
 export default Classroom
