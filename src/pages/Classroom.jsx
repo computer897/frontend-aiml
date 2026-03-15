@@ -539,7 +539,7 @@ function RemovedBanner({ onLeave }) {
 }
 
 // ─── Video Tile (Reusable) ───────────────────────────────────────────────────
-function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn, mirror = isLocal }) {
+function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn, mirror = isLocal, fit = 'cover', isScreenShare = false }) {
   const videoRef = useRef(null)
   const showVideo = stream && videoOn === true
 
@@ -576,7 +576,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
         autoPlay
         playsInline
         muted={isLocal}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${fit === 'contain' ? 'screen-share-video object-contain bg-black' : 'object-cover'} ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         style={mirror ? { transform: 'scaleX(-1)' } : undefined}
       />
       {/* Avatar fallback when camera is off */}
@@ -588,7 +588,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
         </div>
       )}
       {/* Name badge */}
-      <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 flex items-center gap-1">
+      <div className={`absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 flex items-center gap-1 ${isScreenShare ? 'z-20' : ''}`}>
         <div className={`px-1.5 py-0.5 sm:px-2 sm:py-1 bg-black/60 backdrop-blur-sm rounded-md text-white ${badgeText} font-medium max-w-[100px] sm:max-w-[140px] truncate flex items-center gap-1`}>
           {isLocal ? 'You' : name || 'Participant'}
           {role === 'teacher' && !isSmall && ' (Host)'}
@@ -596,7 +596,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
         </div>
       </div>
       {/* Pin indicator for teacher */}
-      {role === 'teacher' && !isSmall && (
+      {role === 'teacher' && !isSmall && !isScreenShare && (
         <div className="absolute top-2 left-2 px-2 py-0.5 bg-purple-600/80 backdrop-blur-sm rounded-md text-white text-[10px] font-semibold uppercase tracking-wider">
           Host
         </div>
@@ -760,9 +760,9 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       {layoutMode === 'screen-share' && (
         <>
           {/* Main screen share area */}
-          <div className="flex-1 min-h-0 p-1.5 sm:p-2">
+          <div className="flex-1 min-h-0 p-0 sm:p-2">
             {teacher && (
-              <div className="w-full h-full rounded-xl overflow-hidden relative">
+              <div className="screen-share-container w-full h-full sm:rounded-xl overflow-hidden relative bg-black">
                 <VideoTile
                   stream={presentingStream}
                   name={teacher.name}
@@ -772,6 +772,8 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
                   micOn={teacher.micOn}
                   size="normal"
                   mirror={false}
+                  fit="contain"
+                  isScreenShare={true}
                 />
                 <div className="absolute top-2 right-2 px-2 py-1 bg-red-600/90 backdrop-blur-sm rounded-md text-white text-[10px] sm:text-xs font-semibold flex items-center gap-1">
                   <Monitor className="w-3 h-3" /> Presenting
