@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Phone,
   HelpCircle, Users, Monitor, Loader2, Clock,
-  Shield, AlertCircle, MonitorUp, Hand, X, UserX, Eye
+  Shield, AlertCircle, MonitorUp, Hand, X, UserX, Eye, Maximize2, Minimize2
 } from 'lucide-react'
 import { classAPI, attendanceAPI, createWebSocket, webcamUtils } from '../services/api'
 import { createWebRTCManager } from '../services/webrtc'
@@ -1055,6 +1055,7 @@ function ParticipantsPanel({ participants, user, onMuteUser, onRemoveUser }) {
 function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const [micOn, setMicOn] = useState(initialSettings?.micOn ?? false)
   const [videoOn, setVideoOn] = useState(initialSettings?.videoOn ?? false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [screenShareStream, setScreenShareStream] = useState(null)
   const [screenShareBlockedMsg, setScreenShareBlockedMsg] = useState('')
@@ -1112,12 +1113,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   const wsRef = useRef(null)
   const faceTrackerRef = useRef(null) // Face detection tracker
   const webrtcRef = useRef(null)
+  const classroomRef = useRef(null)
 
   // ── Real-time engagement detection hook (students only) ──────────────────
   // Runs face detection every 3 seconds when the student is approved.
   // Sends engagement status to the signaling server → forwarded to teacher.
   const { faceDetected: engagementFaceDetected } = useEngagementDetection({
-    videoRef: localVideoRef,
+    videoRef: attendanceVideoRef,
     webrtcRef,
     userId: user?.id || user?._id,
     userName: user?.name,
@@ -1380,47 +1382,85 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       // Initialize face detection for attendance (browser-side only)
       const initializeFaceTracking = async (sessionIdToUse) => {
         if (!consentGiven || user?.role !== 'student') return
+        if (!attendanceVideoRef.current || !localStreamRef.current) {
+          console.warn('[Classroom] Attendance video/stream unavailable; cannot start face tracking')
+          return
+        }
+
+        const waitForVideoReady = (videoElement, timeoutMs = 8000) => {
+          return new Promise((resolve, reject) => {
+            const hasDimensions = videoElement.videoWidth > 0 && videoElement.videoHeight > 0
+            if (videoElement.readyState >= 2 && hasDimensions && !videoElement.paused) {
+              resolve()
+              return
+            }
+
+            const cleanup = () => {
+              videoElement.removeEventListener('loadedmetadata', handleReady)
+              videoElement.removeEventListener('playing', handleReady)
+              clearTimeout(timeoutId)
+            }
+
+            const handleReady = () => {
+              const ready = videoElement.readyState >= 2 && videoElement.videoWidth > 0 && videoElement.videoHeight > 0
+              if (!ready) return
+              cleanup()
+              resolve()
+            }
+
+            const timeoutId = setTimeout(() => {
+              cleanup()
+              reject(new Error(`Attendance video not ready in time (${videoElement.videoWidth}x${videoElement.videoHeight})`))
+            }, timeoutMs)
+
+            videoElement.addEventListener('loadedmetadata', handleReady)
+            videoElement.addEventListener('playing', handleReady)
+          })
+        }
         
         setFaceModelsLoading(true)
         try {
           await loadFaceDetectionModels()
-          
-          // Set up the attendance video element (separate from WebRTC video)
-          if (attendanceVideoRef.current && localStreamRef.current) {
-            attendanceVideoRef.current.srcObject = localStreamRef.current
-            setAttendanceStreamActive(true)
-            
-            // Create face tracker
-            const tracker = createFaceTracker(
-              attendanceVideoRef.current,
-              async (detection) => {
-                // Generate metadata (no video/images sent to server)
-                const metadata = generateAttendanceMetadata(
-                  user?.id || user?._id,
-                  classData.class_id,
-                  detection
-                )
-                metadata.session_id = sessionIdToUse
-                
-                // Update local state for UI feedback
-                setLastDetection(detection)
 
-                // NOTE: socket engagement is handled by useEngagementDetection hook
-                // Send only metadata to backend
-                try {
-                  await attendanceAPI.submitMetadata(metadata)
-                } catch (err) {
-                  console.error('[FaceTracking] Failed to submit metadata:', err)
-                }
-              },
-              3000 // Detection interval: every 3 seconds
-            )
-            
-            faceTrackerRef.current = tracker
-            await tracker.start()
-            setFaceTrackingActive(true)
-            console.log('[Classroom] Face tracking started (browser-side)')
+          const attendanceVideo = attendanceVideoRef.current
+          if (attendanceVideo.srcObject !== localStreamRef.current) {
+            attendanceVideo.srcObject = localStreamRef.current
           }
+
+          try {
+            await attendanceVideo.play()
+          } catch {
+          }
+
+          await waitForVideoReady(attendanceVideo)
+          setAttendanceStreamActive(true)
+          console.log('[Classroom] Attendance video ready:', attendanceVideo.videoWidth, attendanceVideo.videoHeight)
+
+          const tracker = createFaceTracker(
+            attendanceVideo,
+            async (detection) => {
+              const metadata = generateAttendanceMetadata(
+                user?.id || user?._id,
+                classData.class_id,
+                detection
+              )
+              metadata.session_id = sessionIdToUse
+
+              setLastDetection(detection)
+
+              try {
+                await attendanceAPI.submitMetadata(metadata)
+              } catch (err) {
+                console.error('[FaceTracking] Failed to submit metadata:', err)
+              }
+            },
+            3000
+          )
+
+          faceTrackerRef.current = tracker
+          await tracker.start()
+          setFaceTrackingActive(true)
+          console.log('[Classroom] Face tracking started (browser-side)')
         } catch (err) {
           console.error('[Classroom] Failed to initialize face tracking:', err)
         } finally {
@@ -1533,6 +1573,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     if (at.length > 0) {
       at.forEach(t => { t.enabled = micOn })
     }
+    if (webrtcRef.current && typeof webrtcRef.current.setAudioEnabled === 'function') {
+      webrtcRef.current.setAudioEnabled(micOn).catch(() => {})
+    }
   }, [micOn])
 
   // ── Teacher engagement WebSocket ──
@@ -1571,6 +1614,17 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   useEffect(() => {
     if (showChat) setUnreadMessages(0)
   }, [showChat])
+
+  // ── Sync state when user exits native fullscreen via ESC/system UI ──
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNativeFullscreen = document.fullscreenElement === classroomRef.current
+      setIsFullscreen(isNativeFullscreen)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   // ── Handlers ──
   const handleLeaveClass = async () => {
@@ -1675,6 +1729,40 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
     }
   }
 
+  const toggleFullscreen = async () => {
+    const root = classroomRef.current
+    if (!root) {
+      setIsFullscreen(v => !v)
+      return
+    }
+
+    if (!isFullscreen) {
+      setShowChat(false)
+      setShowDoubts(false)
+      setShowEngagement(false)
+      setShowParticipants(false)
+
+      if (root.requestFullscreen) {
+        try {
+          await root.requestFullscreen()
+        } catch {
+          // Fallback to CSS-only fullscreen mode
+        }
+      }
+      setIsFullscreen(true)
+      return
+    }
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try {
+        await document.exitFullscreen()
+      } catch {
+        // ignore and fallback to state-based fullscreen exit
+      }
+    }
+    setIsFullscreen(false)
+  }
+
   const togglePanel = (panel) => {
     setShowChat(panel === 'chat' ? v => !v : false)
     setShowDoubts(panel === 'doubts' ? v => !v : false)
@@ -1696,7 +1784,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   }
 
   return (
-    <div className="h-[100dvh] bg-gray-900 flex flex-col overflow-hidden">
+    <div ref={classroomRef} className={`${isFullscreen ? 'fullscreen-video' : 'normal-classroom h-[100dvh]'} bg-gray-900 flex flex-col overflow-hidden`}>
       {/* Teacher Left overlay */}
       {teacherLeft && user?.role === 'student' && <TeacherLeftBanner onLeave={onLeave} />}
 
@@ -1742,6 +1830,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
       )}
 
       {/* ── Top Bar ── */}
+      {!isFullscreen && (
       <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-4 py-2 sm:py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1772,6 +1861,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Main Content ── */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -1786,7 +1876,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
           
           {/* Attendance Tracking Active Indicator - shown when camera is off but tracking continues */}
-          {user?.role === 'student' && faceTrackingActive && !videoOn && (
+          {user?.role === 'student' && faceTrackingActive && !videoOn && !isFullscreen && (
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
               <Eye className="w-4 h-4 text-white" />
               <span className="text-white text-xs font-medium">Attendance Tracking Active</span>
@@ -1797,7 +1887,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
           
           {/* Face detection status indicator (for student awareness) */}
-          {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && (
+          {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && !isFullscreen && (
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
               <div className={`w-2 h-2 rounded-full ${lastDetection.faceDetected ? 'bg-green-400' : 'bg-red-400'}`} />
               <span className="text-xs text-gray-300">
@@ -1810,7 +1900,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
           
           {/* Face models loading indicator */}
-          {user?.role === 'student' && faceModelsLoading && (
+          {user?.role === 'student' && faceModelsLoading && !isFullscreen && (
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur-sm rounded-lg">
               <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
               <span className="text-gray-300 text-xs">Loading face detection...</span>
@@ -1829,7 +1919,20 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
             screenShareStream={screenShareStream}
           />
 
+          {/* Fullscreen minimize button */}
+          {isFullscreen && (
+            <button
+              onClick={toggleFullscreen}
+              className="minimize-btn"
+              title="Minimize"
+            >
+              <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              <span className="text-white text-xs sm:text-sm font-medium">Minimize</span>
+            </button>
+          )}
+
           {/* ── Bottom Controls (Google Meet style) ── */}
+          {!isFullscreen && (
           <div className="absolute bottom-0 left-0 right-0 bg-gray-800/95 border-t border-gray-700 px-3 sm:px-6 py-3 sm:py-4 backdrop-blur safe-bottom">
             <div className="flex items-center justify-between max-w-4xl mx-auto">
               {/* Left side buttons */}
@@ -1921,6 +2024,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-2.5 sm:p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition"
+                  title="Maximize"
+                >
+                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                </button>
                 {/* End Class — teacher only */}
                 {user?.role === 'teacher' && (
                   <button
@@ -1942,10 +2052,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* ── Side Panel (desktop) ── */}
-        {activeSidePanel && (
+        {activeSidePanel && !isFullscreen && (
           <div className="hidden md:flex flex-col w-72 lg:w-80 bg-gray-800 border-l border-gray-700 overflow-hidden relative">
             {/* Close button */}
             <button
@@ -1969,7 +2080,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         )}
 
         {/* ── Mobile bottom sheet panel ── */}
-        {activeSidePanel && (
+        {activeSidePanel && !isFullscreen && (
           <div className="md:hidden absolute inset-x-0 bottom-[72px] top-0 z-10 flex flex-col">
             <div className="flex-1" onClick={() => togglePanel(activeSidePanel)} />
             <div className="bg-gray-800 border-t border-gray-700 rounded-t-2xl h-[60%] overflow-hidden flex flex-col">

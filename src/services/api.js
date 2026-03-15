@@ -184,10 +184,17 @@ export const announcementAPI = {
 
 // Attendance APIs
 export const attendanceAPI = {
-  start: async (classId) => {
+  start: async (classId, sessionId) => {
     return apiRequest('/attendance/start', {
       method: 'POST',
-      body: JSON.stringify({ class_id: classId }),
+      body: JSON.stringify({ class_id: classId, session_id: sessionId }),
+    })
+  },
+
+  submitMetadata: async (metadata) => {
+    return apiRequest('/attendance/metadata', {
+      method: 'POST',
+      body: JSON.stringify(metadata),
     })
   },
 

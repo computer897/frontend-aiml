@@ -649,6 +649,39 @@ export function createWebRTCManager() {
   }
 
   /**
+   * Enable/disable local microphone and ensure audio sender binding exists for
+   * all peers so both teacher and students remain audible.
+   */
+  async function setAudioEnabled(enabled) {
+    if (!localStream) return
+    const audioTrack = localStream.getAudioTracks()[0]
+    if (!audioTrack) return
+
+    audioTrack.enabled = enabled
+
+    for (const pc of Object.values(peers)) {
+      const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
+
+      if (audioSender) {
+        if (audioSender.track !== audioTrack) {
+          try {
+            await audioSender.replaceTrack(audioTrack)
+          } catch (e) {
+            console.error('[WebRTC] setAudioEnabled replaceTrack error:', e)
+          }
+        }
+      } else {
+        try {
+          pc.addTrack(audioTrack, localStream)
+          console.log('[WebRTC] Added missing audio sender while toggling mic')
+        } catch (e) {
+          console.error('[WebRTC] setAudioEnabled addTrack error:', e)
+        }
+      }
+    }
+  }
+
+  /**
    * Student sends engagement status to server via socket.io.
    * Server forwards it to the room's teacher as 'student-engagement'.
    * @param {string} studentId
@@ -828,6 +861,7 @@ export function createWebRTCManager() {
     startScreenShare,
     stopScreenShare,
     setVideoEnabled,
+    setAudioEnabled,
     sendEngagementUpdate,
     isConnected,
     getSocketId,
