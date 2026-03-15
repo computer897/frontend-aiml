@@ -784,7 +784,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
           </div>
           {/* Bottom thumbnail row */}
           {(studentsWithCamera.length > 0 || showTeacherCameraThumbnail) && (
-            <div className="flex-shrink-0 px-1.5 pb-1.5 sm:px-2 sm:pb-2">
+            <div className="flex-shrink-0 px-1.5 pb-28 sm:pb-32 sm:px-2">
               <div className="flex gap-1.5 overflow-x-auto py-1"
                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {showTeacherCameraThumbnail && (
@@ -827,7 +827,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
               {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
             </div>
             {/* Student horizontal scroll */}
-            <div className="flex-shrink-0 flex gap-1.5 overflow-x-auto pb-1 snap-x"
+            <div className="flex-shrink-0 flex gap-1.5 overflow-x-auto pb-24 snap-x"
                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {studentsWithCamera.map(p => (
                 <div key={p.key} className="flex-shrink-0 w-28 h-20 snap-center rounded-lg overflow-hidden">
@@ -882,14 +882,14 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       {/* ══════════════════════════════════════════════════════════════════ */}
       {layoutMode === 'teacher-priority' && (
         <>
-          {/* Main teacher video */}
-          <div className={`flex-1 min-h-0 p-1.5 sm:p-2 ${studentsWithCamera.length > 0 ? 'pb-0' : ''}`}>
+          {/* Teacher video fills the entire container (Google Meet style) */}
+          <div className="flex-1 min-h-0">
             {teacher ? (
-              <div className="w-full h-full rounded-xl overflow-hidden">
+              <div className="w-full h-full overflow-hidden">
                 <VideoTile stream={teacher.stream} name={teacher.name} role="teacher" isLocal={teacher.isLocal} videoOn={teacher.videoOn} micOn={teacher.micOn} size="normal" />
               </div>
             ) : (
-              <div className="w-full h-full bg-gray-800 rounded-xl flex items-center justify-center">
+              <div className="w-full h-full bg-gray-950 flex items-center justify-center">
                 <div className="text-center">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-purple-500 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xl">
                     <span className="text-white text-3xl font-bold">T</span>
@@ -901,27 +901,17 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
             {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
           </div>
 
-          {/* Student thumbnail row */}
+          {/* Student thumbnails – floating bottom-right strip (Google Meet style) */}
           {studentsWithCamera.length > 0 && (
-            <div className="flex-shrink-0 px-1.5 pb-1.5 sm:px-2 sm:pb-2 pt-1.5">
-              {/* Mobile: horizontal scroll */}
-              <div className="sm:hidden flex gap-1.5 overflow-x-auto pb-1 snap-x"
-                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {studentsWithCamera.map(p => (
-                  <div key={p.key} className="flex-shrink-0 w-28 h-20 snap-center rounded-lg overflow-hidden">
-                    <VideoTile stream={p.stream} name={p.name} role={p.role} isLocal={p.isLocal} videoOn={p.videoOn} micOn={p.micOn} size="small" />
-                  </div>
-                ))}
-              </div>
-              {/* Desktop: grid row */}
-              <div className="hidden sm:grid gap-2"
-                   style={{ gridTemplateColumns: `repeat(${Math.min(studentsWithCamera.length, 5)}, 1fr)`, maxHeight: '160px' }}>
-                {studentsWithCamera.map(p => (
-                  <div key={p.key} className="h-28 lg:h-32 rounded-lg overflow-hidden">
-                    <VideoTile stream={p.stream} name={p.name} role={p.role} isLocal={p.isLocal} videoOn={p.videoOn} micOn={p.micOn} size="small" />
-                  </div>
-                ))}
-              </div>
+            <div
+              className="absolute bottom-24 sm:bottom-28 right-2 sm:right-3 z-10 flex flex-col gap-1.5 sm:gap-2 max-h-[55vh] overflow-y-auto"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {studentsWithCamera.map(p => (
+                <div key={p.key} className="flex-shrink-0 w-36 h-24 sm:w-44 sm:h-28 rounded-xl overflow-hidden border border-white/10 shadow-2xl">
+                  <VideoTile stream={p.stream} name={p.name} role={p.role} isLocal={p.isLocal} videoOn={p.videoOn} micOn={p.micOn} size="small" />
+                </div>
+              ))}
             </div>
           )}
         </>
@@ -930,7 +920,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       {/* ── Self-view PIP (students only, like Google Meet) ── */}
       {user?.role !== 'teacher' && layoutMode !== 'grid' && layoutMode !== 'split' && (
         <>
-          <div className="absolute bottom-20 right-2 sm:right-3 z-10 w-32 h-24 sm:w-44 sm:h-32 rounded-xl overflow-hidden shadow-2xl border-2 border-gray-600/40 hover:border-gray-500/60 transition-all duration-200 cursor-pointer">
+          <div className="absolute bottom-24 sm:bottom-28 right-2 sm:right-3 z-10 w-32 h-20 sm:w-40 sm:h-24 rounded-xl overflow-hidden shadow-2xl border border-white/10 hover:border-white/20 transition-all duration-200 cursor-pointer">
             <VideoTile
               stream={localStream}
               name={user?.name}
@@ -952,7 +942,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
       {/* Empty room state */}
       {Object.keys(remoteStreams).length === 0 && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+        <div className="absolute bottom-28 sm:bottom-32 left-1/2 transform -translate-x-1/2 z-10">
           <div className="px-4 py-2 bg-gray-800/90 backdrop-blur-sm rounded-full text-gray-400 text-sm border border-gray-700/50">
             {user?.role === 'teacher' ? 'Waiting for students to join...' : 'Connecting to classroom...'}
           </div>
@@ -1784,7 +1774,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   }
 
   return (
-    <div ref={classroomRef} className={`${isFullscreen ? 'fullscreen-video' : 'normal-classroom h-[100dvh]'} bg-gray-900 flex flex-col overflow-hidden`}>
+    <div ref={classroomRef} className={`${isFullscreen ? 'fullscreen-video' : 'h-[100dvh]'} bg-gray-950 flex overflow-hidden`}>
       {/* Teacher Left overlay */}
       {teacherLeft && user?.role === 'student' && <TeacherLeftBanner onLeave={onLeave} />}
 
@@ -1829,55 +1819,52 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         </div>
       )}
 
-      {/* ── Top Bar ── */}
-      {!isFullscreen && (
-      <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-4 py-2 sm:py-3 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-8 h-8 bg-primary-600/20 rounded-lg items-center justify-center hidden sm:flex flex-shrink-0">
-              <Monitor className="w-4 h-4 text-primary-400" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-white text-sm sm:text-lg font-semibold truncate">{classData?.title || 'Classroom'}</h1>
-              <p className="text-gray-400 text-[11px] sm:text-sm truncate">{classData?.teacher_name}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-green-600/20 border border-green-600/40 rounded-lg">
-              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-green-400 text-xs sm:text-sm font-medium">Live</span>
-            </div>
-            <button
-              onClick={() => togglePanel('participants')}
-              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${showParticipants ? 'bg-primary-600' : 'bg-gray-700 hover:bg-gray-600'}`}
-            >
-              <Users className="w-3.5 h-3.5 text-white" />
-              <span className="text-white text-xs font-medium">{participants.count || 1}</span>
-            </button>
-            <button onClick={handleLeaveClass} className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-1.5 text-xs sm:text-sm">
-              <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline font-medium">Leave</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      )}
-
       {/* ── Main Content ── */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Video area */}
-        <div className="flex-1 relative overflow-hidden">
+        {/* Video area – fills full height; header & controls are gradient overlays */}
+        <div className="flex-1 relative overflow-hidden bg-gray-950">
           {/* Hidden video element for local stream (needed for canvas capture) */}
           <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
-          
+
           {/* Hidden video element for attendance tracking (separate from WebRTC) */}
           {user?.role === 'student' && (
             <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" />
           )}
-          
+
+          {/* ── Top Bar Overlay (Google Meet style – transparent gradient) ── */}
+          {!isFullscreen && (
+          <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/75 via-black/20 to-transparent px-3 sm:px-5 pt-3 sm:pt-4 pb-14 pointer-events-none">
+            <div className="flex items-center justify-between pointer-events-auto">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="min-w-0">
+                  <h1 className="text-white text-sm sm:text-base font-semibold truncate drop-shadow-lg">{classData?.title || 'Classroom'}</h1>
+                  <p className="text-gray-300/80 text-[11px] sm:text-xs truncate">{classData?.teacher_name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-black/40 backdrop-blur-sm border border-white/10 rounded-lg">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-white text-xs sm:text-sm font-medium">Live</span>
+                </div>
+                <button
+                  onClick={() => togglePanel('participants')}
+                  className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg backdrop-blur-sm transition ${showParticipants ? 'bg-primary-600/90' : 'bg-black/40 hover:bg-black/60 border border-white/10'}`}
+                >
+                  <Users className="w-3.5 h-3.5 text-white" />
+                  <span className="text-white text-xs font-medium">{participants.count || 1}</span>
+                </button>
+                <button onClick={handleLeaveClass} className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-red-600/90 backdrop-blur-sm text-white rounded-lg hover:bg-red-600 transition flex items-center gap-1.5 text-xs sm:text-sm">
+                  <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline font-medium">Leave</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          )}
+
           {/* Attendance Tracking Active Indicator - shown when camera is off but tracking continues */}
           {user?.role === 'student' && faceTrackingActive && !videoOn && !isFullscreen && (
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
+            <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
               <Eye className="w-4 h-4 text-white" />
               <span className="text-white text-xs font-medium">Attendance Tracking Active</span>
               {lastDetection?.faceDetected && (
@@ -1888,7 +1875,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           
           {/* Face detection status indicator (for student awareness) */}
           {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && !isFullscreen && (
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
+            <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
               <div className={`w-2 h-2 rounded-full ${lastDetection.faceDetected ? 'bg-green-400' : 'bg-red-400'}`} />
               <span className="text-xs text-gray-300">
                 {lastDetection.faceDetected ? 'Face detected' : 'Face not visible'}
@@ -1901,23 +1888,26 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           
           {/* Face models loading indicator */}
           {user?.role === 'student' && faceModelsLoading && !isFullscreen && (
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur-sm rounded-lg">
+            <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur-sm rounded-lg">
               <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
               <span className="text-gray-300 text-xs">Loading face detection...</span>
             </div>
           )}
 
-          <VideoGrid
-            localStream={localStream}
-            localVideoOn={videoOn}
-            localMicOn={micOn}
-            remoteStreams={remoteStreams}
-            remoteCameraStatus={remoteCameraStatus}
-            user={user}
-            canvasRef={canvasRef}
-            isScreenSharing={isScreenSharing}
-            screenShareStream={screenShareStream}
-          />
+          {/* Video grid fills the entire area — controls and header are layered above it */}
+          <div className="absolute inset-0">
+            <VideoGrid
+              localStream={localStream}
+              localVideoOn={videoOn}
+              localMicOn={micOn}
+              remoteStreams={remoteStreams}
+              remoteCameraStatus={remoteCameraStatus}
+              user={user}
+              canvasRef={canvasRef}
+              isScreenSharing={isScreenSharing}
+              screenShareStream={screenShareStream}
+            />
+          </div>
 
           {/* Fullscreen minimize button */}
           {isFullscreen && (
@@ -1931,9 +1921,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
             </button>
           )}
 
-          {/* ── Bottom Controls (Google Meet style) ── */}
+          {/* ── Bottom Controls (Google Meet style – gradient overlay) ── */}
           {!isFullscreen && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gray-800/95 border-t border-gray-700 px-3 sm:px-6 py-3 sm:py-4 backdrop-blur safe-bottom">
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 sm:px-6 py-5 sm:py-7 safe-bottom">
             <div className="flex items-center justify-between max-w-4xl mx-auto">
               {/* Left side buttons */}
               <div className="flex items-center gap-2">
@@ -2081,7 +2071,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
         {/* ── Mobile bottom sheet panel ── */}
         {activeSidePanel && !isFullscreen && (
-          <div className="md:hidden absolute inset-x-0 bottom-[72px] top-0 z-10 flex flex-col">
+          <div className="md:hidden absolute inset-x-0 bottom-[80px] top-0 z-10 flex flex-col">
             <div className="flex-1" onClick={() => togglePanel(activeSidePanel)} />
             <div className="bg-gray-800 border-t border-gray-700 rounded-t-2xl h-[60%] overflow-hidden flex flex-col">
               <div className="flex items-center justify-between py-2 px-4 border-b border-gray-700">
