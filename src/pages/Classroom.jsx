@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Phone,
   HelpCircle, Users, Monitor, Loader2, Clock,
-  Shield, AlertCircle, MonitorUp, Hand, X, UserX, Eye, Maximize2, Minimize2
+  Shield, AlertCircle, MonitorUp, Hand, X, UserX, Eye
 } from 'lucide-react'
 import { classAPI, attendanceAPI, createWebSocket, webcamUtils } from '../services/api'
 import { createWebRTCManager } from '../services/webrtc'
@@ -882,12 +882,10 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       {/* ══════════════════════════════════════════════════════════════════ */}
       {layoutMode === 'teacher-priority' && (
         <>
-          {/* Teacher video fills the entire container (Google Meet style) */}
-          <div className="flex-1 min-h-0">
+          {/* Teacher video fills the entire grid absolutely (Google Meet style) */}
+          <div className="absolute inset-0">
             {teacher ? (
-              <div className="w-full h-full overflow-hidden">
-                <VideoTile stream={teacher.stream} name={teacher.name} role="teacher" isLocal={teacher.isLocal} videoOn={teacher.videoOn} micOn={teacher.micOn} size="normal" />
-              </div>
+              <VideoTile stream={teacher.stream} name={teacher.name} role="teacher" isLocal={teacher.isLocal} videoOn={teacher.videoOn} micOn={teacher.micOn} size="normal" />
             ) : (
               <div className="w-full h-full bg-gray-950 flex items-center justify-center">
                 <div className="text-center">
@@ -1774,7 +1772,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
   }
 
   return (
-    <div ref={classroomRef} className={`${isFullscreen ? 'fullscreen-video' : 'h-[100dvh]'} bg-gray-950 flex overflow-hidden`}>
+    <div ref={classroomRef} className="h-[100dvh] bg-gray-950 flex overflow-hidden">
       {/* Teacher Left overlay */}
       {teacherLeft && user?.role === 'student' && <TeacherLeftBanner onLeave={onLeave} />}
 
@@ -1832,7 +1830,6 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
 
           {/* ── Top Bar Overlay (Google Meet style – transparent gradient) ── */}
-          {!isFullscreen && (
           <div className="absolute top-0 left-0 right-0 z-20 bg-gradient-to-b from-black/75 via-black/20 to-transparent px-3 sm:px-5 pt-3 sm:pt-4 pb-14 pointer-events-none">
             <div className="flex items-center justify-between pointer-events-auto">
               <div className="flex items-center gap-2 min-w-0">
@@ -1860,10 +1857,9 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
               </div>
             </div>
           </div>
-          )}
 
           {/* Attendance Tracking Active Indicator - shown when camera is off but tracking continues */}
-          {user?.role === 'student' && faceTrackingActive && !videoOn && !isFullscreen && (
+          {user?.role === 'student' && faceTrackingActive && !videoOn && (
             <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
               <Eye className="w-4 h-4 text-white" />
               <span className="text-white text-xs font-medium">Attendance Tracking Active</span>
@@ -1874,7 +1870,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
           
           {/* Face detection status indicator (for student awareness) */}
-          {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && !isFullscreen && (
+          {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && (
             <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
               <div className={`w-2 h-2 rounded-full ${lastDetection.faceDetected ? 'bg-green-400' : 'bg-red-400'}`} />
               <span className="text-xs text-gray-300">
@@ -1887,7 +1883,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
           )}
           
           {/* Face models loading indicator */}
-          {user?.role === 'student' && faceModelsLoading && !isFullscreen && (
+          {user?.role === 'student' && faceModelsLoading && (
             <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-3 py-2 bg-gray-800/90 backdrop-blur-sm rounded-lg">
               <Loader2 className="w-4 h-4 text-primary-400 animate-spin" />
               <span className="text-gray-300 text-xs">Loading face detection...</span>
@@ -1909,20 +1905,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
             />
           </div>
 
-          {/* Fullscreen minimize button */}
-          {isFullscreen && (
-            <button
-              onClick={toggleFullscreen}
-              className="minimize-btn"
-              title="Minimize"
-            >
-              <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-              <span className="text-white text-xs sm:text-sm font-medium">Minimize</span>
-            </button>
-          )}
-
           {/* ── Bottom Controls (Google Meet style – gradient overlay) ── */}
-          {!isFullscreen && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 sm:px-6 py-5 sm:py-7 safe-bottom">
             <div className="flex items-center justify-between max-w-4xl mx-auto">
               {/* Left side buttons */}
@@ -2014,13 +1997,6 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
 
               {/* Right side */}
               <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleFullscreen}
-                  className="p-2.5 sm:p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition"
-                  title="Maximize"
-                >
-                  <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </button>
                 {/* End Class — teacher only */}
                 {user?.role === 'teacher' && (
                   <button
@@ -2042,11 +2018,10 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
               </div>
             </div>
           </div>
-          )}
         </div>
 
         {/* ── Side Panel (desktop) ── */}
-        {activeSidePanel && !isFullscreen && (
+        {activeSidePanel && (
           <div className="hidden md:flex flex-col w-72 lg:w-80 bg-gray-800 border-l border-gray-700 overflow-hidden relative">
             {/* Close button */}
             <button
@@ -2070,7 +2045,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings }) {
         )}
 
         {/* ── Mobile bottom sheet panel ── */}
-        {activeSidePanel && !isFullscreen && (
+        {activeSidePanel && (
           <div className="md:hidden absolute inset-x-0 bottom-[80px] top-0 z-10 flex flex-col">
             <div className="flex-1" onClick={() => togglePanel(activeSidePanel)} />
             <div className="bg-gray-800 border-t border-gray-700 rounded-t-2xl h-[60%] overflow-hidden flex flex-col">
