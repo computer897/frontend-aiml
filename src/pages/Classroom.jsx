@@ -1175,6 +1175,17 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
       rtc.callbacks.onConnectionStateChange = (state) => {
         console.log('[Classroom] Connection state:', state)
         setConnectionState(state)
+        
+        // Show user-friendly error messages based on connection state
+        if (state === 'error') {
+          console.error('[Classroom] WebRTC connection error detected')
+          alert('Connection error: Failed to connect to the classroom. Please check:\n1. Your internet connection\n2. The backend server is running\n3. The signaling server is running\n\nTry reloading the page.')
+        } else if (state === 'disconnected') {
+          console.warn('[Classroom] WebRTC connection disconnected')
+          // Don't show alert for disconnection - it's expected on leave
+        } else if (state === 'connected') {
+          console.log('[Classroom] WebRTC connection successful')
+        }
       }
 
       rtc.callbacks.onRemoteStream = (socketId, remoteStream, userInfo) => {
@@ -1601,21 +1612,45 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
 
       // Join the room
       if (stream) {
-        rtc.joinRoom(
-          classData.class_id,
-          user?.role || 'student',
-          user?.id || user?._id,
-          user?.name,
-          stream
-        )
+        try {
+          console.log('[Classroom] Attempting to join WebRTC room:', {
+            classId: classData.class_id,
+            role: user?.role,
+            userId: user?.id || user?._id
+          })
+          
+          rtc.joinRoom(
+            classData.class_id,
+            user?.role || 'student',
+            user?.id || user?._id,
+            user?.name,
+            stream
+          )
+          
+          console.log('[Classroom] Successfully called joinRoom')
+        } catch (err) {
+          console.error('[Classroom] Error joining room:', err)
+          alert(`Failed to connect to classroom: ${err.message}. Please check your connection and try again.`)
+        }
+      } else {
+        console.error('[Classroom] No stream available for WebRTC join')
+        alert('Failed to access camera/microphone. Please check permissions and try again.')
       }
 
       // Teacher: activate class
       if (user?.role === 'teacher') {
         try {
+          console.log('[Classroom] Activating class:', classData.class_id)
           await classAPI.activate(classData.class_id)
+          console.log('[Classroom] Class activated successfully')
         } catch (err) {
-          console.error('Failed to activate class:', err)
+          console.error('[Classroom] Failed to activate class:', {
+            error: err.message,
+            classId: classData.class_id,
+            timestamp: new Date().toISOString()
+          })
+          // Show user-friendly error but don't block classroom
+          alert(`Warning: Could not fully activate class session. Some features may not work. Error: ${err.message}`)
         }
       }
 
