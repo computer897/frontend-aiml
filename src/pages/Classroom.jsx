@@ -1343,6 +1343,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           try {
             await classAPI.deactivate(classData.class_id)
             console.log('[Classroom] Class deactivated on backend')
+            // Update local state to mark class as finished
+            setClassData(prev => ({
+              ...prev,
+              is_active: false,
+              is_finished: true,
+              status: 'finished'
+            }))
           } catch (err) {
             console.error('[Classroom] Failed to deactivate class:', err)
           }
@@ -1380,6 +1387,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           try {
             await classAPI.deactivate(classData.class_id)
             console.log('[Classroom] Class deactivated on backend')
+            // Update local state to mark class as finished
+            setClassData(prev => ({
+              ...prev,
+              is_active: false,
+              is_finished: true,
+              status: 'finished'
+            }))
           } catch (err) {
             console.error('[Classroom] Failed to deactivate class:', err)
           }

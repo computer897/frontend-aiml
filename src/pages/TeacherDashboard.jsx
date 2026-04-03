@@ -172,12 +172,25 @@ function TeacherDashboard({ user, onLogout, onUserUpdate }) {
   useEffect(() => { 
     loadTeacherData()
     
+    // Force refresh when page becomes visible (user returns from classroom)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[TeacherDashboard] Page visible, refreshing class list')
+        loadTeacherData()
+      }
+    }
+    
     // Poll for class status updates every 5 seconds to detect finished classes
     const classRefreshInterval = setInterval(() => {
       loadTeacherData()
     }, 5000)
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    return () => clearInterval(classRefreshInterval)
+    return () => {
+      clearInterval(classRefreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   // Watch for changes in active class status (when class finishes)
