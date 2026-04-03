@@ -242,7 +242,15 @@ function TeacherDashboard({ user, onLogout, onUserUpdate }) {
         }
       } catch (error) {
         if (!cancelled) {
-          setLiveError(error.message || 'Unable to fetch live engagement')
+          // 404 or similar errors likely mean the class has ended
+          if (error.message?.includes('404') || error.message?.includes('not found')) {
+            console.log('[TeacherDashboard] Class appears to be finished, clearing live engagement')
+            setLiveEngagement(null)
+            setLiveError(null)
+          } else {
+            // Only show non-404 errors
+            setLiveError(error.message || 'Unable to fetch live engagement')
+          }
         }
       }
     }

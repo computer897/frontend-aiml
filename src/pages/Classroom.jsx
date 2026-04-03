@@ -1338,6 +1338,14 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           setAttendanceReport(data.attendanceReport)
           setShowAttendanceReport(true)
           setIsEndingClass(false)
+          
+          // Deactivate the class on backend after getting attendance report
+          try {
+            await classAPI.deactivate(classData.class_id)
+            console.log('[Classroom] Class deactivated on backend')
+          } catch (err) {
+            console.error('[Classroom] Failed to deactivate class:', err)
+          }
           return
         }
 
@@ -1367,6 +1375,14 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           console.error('Failed to fetch finalized attendance after class end:', err)
         } finally {
           setIsEndingClass(false)
+          
+          // Deactivate the class on backend after attempting to fetch report
+          try {
+            await classAPI.deactivate(classData.class_id)
+            console.log('[Classroom] Class deactivated on backend')
+          } catch (err) {
+            console.error('[Classroom] Failed to deactivate class:', err)
+          }
         }
       }
 
