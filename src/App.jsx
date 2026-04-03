@@ -12,6 +12,14 @@ import AnnouncementsPage from './pages/AnnouncementsPage'
 import DocumentsPage from './pages/DocumentsPage'
 import { PWAInstallBanner, OfflineIndicator, UpdateBanner } from './components/PWAInstallBanner'
 
+// Validate API URL on app initialization
+const apiUrl = import.meta.env.VITE_API_URL
+if (!apiUrl) {
+  console.warn('[STARTUP] VITE_API_URL not set, using fallback: https://aiml-1-rjdv.onrender.com')
+} else {
+  console.log('[STARTUP] API configured:', apiUrl)
+}
+
 function App() {
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user')
