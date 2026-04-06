@@ -2433,7 +2433,7 @@ function Classroom({ user }) {
       await fetchClass() // Fetch immediately
 
       // Poll for status changes every 10 seconds while in classroom
-      while (active && !isFinished) {
+      while (active) {
         await new Promise(r => setTimeout(r, 10000))
         // Only fetch if still active and joined
         if (!active || !hasJoined) break
@@ -2446,9 +2446,7 @@ function Classroom({ user }) {
             // Detect when class becomes finished
             const becameFinished = data.is_finished === true || data.status === 'finished' || data.status === 'ended'
             if (becameFinished) {
-              console.log('[Classroom] Class marked as finished by backend')
               setIsFinished(true)
-              break // Stop polling when class is finished
             }
             pollCount = 0 // Reset count on successful fetch
           }
@@ -2462,23 +2460,7 @@ function Classroom({ user }) {
 
     startPolling()
     return () => { active = false }
-  }, [id, hasJoined, showError, isFinished])
-
-  // ── Client-side end time check: automatically end class when time expires ──
-  useEffect(() => {
-    if (isFinished || !scheduledEndTime || !hasJoined) return
-
-    const checkEndTime = setInterval(() => {
-      const now = Date.now()
-      if (now >= scheduledEndTime) {
-        console.log('[Classroom] Scheduled end time reached - marking class as finished')
-        setIsFinished(true)
-        setIsLive(false)
-      }
-    }, 1000) // Check every second
-
-    return () => clearInterval(checkEndTime)
-  }, [scheduledEndTime, isFinished, hasJoined])
+  }, [id, hasJoined, showError])
 
   const handleLeave = useCallback((navigationState = null) => {
     navigate(
