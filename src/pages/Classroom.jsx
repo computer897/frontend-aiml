@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare, Phone,
@@ -564,8 +564,100 @@ function ClassNotFoundScreen({ onLeave }) {
   )
 }
 
+// ─── Active Speaker Detection ────────────────────────────────────────────────
+function useActiveSpeaker(participants) {
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null)
+  const audioContextRef = useRef(null)
+  const analyserRefs = useRef([])
+  const timerRef = useRef(null)
+
+  const participantSignature = useMemo(
+    () => participants.map(participant => `${participant.id}:${participant.stream?.id || 'none'}`).join('|'),
+    [participants]
+  )
+
+  useEffect(() => {
+    const candidates = participants.filter(participant => participant.stream && participant.stream.getAudioTracks().length > 0)
+
+    if (typeof window === 'undefined' || candidates.length === 0) {
+      setActiveSpeakerId(null)
+      return
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) {
+      setActiveSpeakerId(null)
+      return
+    }
+
+    const audioContext = new AudioContextClass()
+    audioContextRef.current = audioContext
+
+    analyserRefs.current = candidates.map(participant => {
+      const source = audioContext.createMediaStreamSource(participant.stream)
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 1024
+      source.connect(analyser)
+
+      return {
+        participant,
+        source,
+        analyser,
+        buffer: new Uint8Array(analyser.fftSize),
+      }
+    })
+
+    const measure = () => {
+      let bestId = null
+      let bestLevel = 0
+
+      analyserRefs.current.forEach(({ participant, analyser, buffer }) => {
+        analyser.getByteTimeDomainData(buffer)
+
+        let sum = 0
+        for (let i = 0; i < buffer.length; i += 1) {
+          const normalized = (buffer[i] - 128) / 128
+          sum += normalized * normalized
+        }
+
+        const level = Math.sqrt(sum / buffer.length)
+        if (level > bestLevel) {
+          bestLevel = level
+          bestId = participant.id
+        }
+      })
+
+      setActiveSpeakerId(bestLevel >= 0.02 ? bestId : null)
+      timerRef.current = window.setTimeout(measure, 250)
+    }
+
+    audioContext.resume?.().catch(() => {})
+    measure()
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+
+      analyserRefs.current.forEach(({ source, analyser }) => {
+        try { source.disconnect() } catch { /* ignore */ }
+        try { analyser.disconnect() } catch { /* ignore */ }
+      })
+      analyserRefs.current = []
+
+      if (audioContextRef.current) {
+        audioContextRef.current.close?.().catch(() => {})
+        audioContextRef.current = null
+      }
+    }
+  }, [participantSignature])
+
+  return activeSpeakerId
+}
+
 // ─── Video Tile (Reusable) ───────────────────────────────────────────────────
-function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn, mirror = isLocal, fit = 'cover', isScreenShare = false }) {
+const VideoTile = memo(function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micOn, mirror = isLocal, fit = 'contain', isScreenShare = false, isActiveSpeaker = false, className = '' }) {
   const videoRef = useRef(null)
   const showVideo = stream && videoOn === true
 
@@ -595,14 +687,14 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
   const badgeText = isSmall ? 'text-[10px]' : 'text-xs'
 
   return (
-    <div className="relative w-full h-full bg-gray-900 rounded-xl overflow-hidden group transition-all duration-300">
+    <div className={`relative w-full h-full bg-gray-950 rounded-2xl overflow-hidden group transition-all duration-300 ${isActiveSpeaker ? 'ring-2 ring-green-500/90' : 'ring-1 ring-white/10'} ${className}`}>
       {/* Video element — muted ONLY for local preview (isLocal), unmuted for remote so audio plays */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={isLocal}
-        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${fit === 'contain' ? 'screen-share-video object-contain bg-black' : 'object-cover'} ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${fit === 'contain' ? 'main-video object-contain bg-black' : 'object-contain bg-black'} ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         style={mirror ? { transform: 'scaleX(-1)' } : undefined}
       />
       {/* Avatar fallback when camera is off */}
@@ -629,7 +721,7 @@ function VideoTile({ stream, name, role, isLocal, videoOn, size = 'normal', micO
       )}
     </div>
   )
-}
+})
 
 // ─── Remote Audio Player ─────────────────────────────────────────────────────
 // Dedicated <audio> elements for each remote peer — guarantees audio playback
@@ -694,259 +786,215 @@ function RemoteAudioPlayer({ remoteStreams }) {
 }
 
 // ─── Google Meet Video Grid ─────────────────────────────────────────────────
-// LAYOUT RULES:
-// 1. MULTI-USER GRID  (3+ cameras ON) → responsive grid (2x2, 3x2, 3x3…)
-// 2. TWO-USER SPLIT   (teacher + 1 student cameras ON) → 50/50 split
-// 3. TEACHER PRIORITY  (teacher camera ON, students mixed) → main + bottom row
-// 4. SCREEN SHARE      (teacher sharing screen) → main screen + thumbnail row
-// 5. CAMERA OFF        → tile removed from visible grid, audio still plays
-// 6. MOBILE            → teacher fullscreen + horizontal scroll thumbnails
 function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing, screenShareStream }) {
-  // ─── Build sorted participant list (teacher first) ───
-  const buildParticipants = () => {
-    const isTeacher = user?.role === 'teacher'
-    const all = []
+  const participants = useMemo(() => {
+    const roster = []
 
-    // Local user
-    all.push({
-      key: 'local',
-      stream: localStream,
-      name: user?.name,
-      role: user?.role,
-      isLocal: true,
-      videoOn: localVideoOn,
-      micOn: localMicOn,
-      isTeacher,
-    })
+    if (user?.role === 'teacher' && localStream) {
+      roster.push({
+        id: 'teacher-local',
+        stream: localStream,
+        name: user?.name || 'Teacher',
+        role: 'teacher',
+        isLocal: true,
+        videoOn: localVideoOn,
+        micOn: localMicOn,
+      })
+    }
 
-    // Remote participants
     Object.entries(remoteStreams).forEach(([socketId, { stream, userInfo }]) => {
-      const remoteRole = userInfo?.role || 'student'
-      const remoteCamOn = remoteCameraStatus[socketId] !== false
-      all.push({
-        key: socketId,
+      roster.push({
+        id: socketId,
         stream,
-        name: userInfo?.userName,
-        role: remoteRole,
+        name: userInfo?.userName || (userInfo?.role === 'teacher' ? 'Teacher' : 'Student'),
+        role: userInfo?.role || 'student',
         isLocal: false,
-        videoOn: remoteCamOn,
-        isTeacher: remoteRole === 'teacher',
+        videoOn: remoteCameraStatus[socketId] !== false,
+        micOn: userInfo?.micOn,
       })
     })
 
-    // Sort: teacher always first
-    all.sort((a, b) => (a.role === 'teacher' ? -1 : b.role === 'teacher' ? 1 : 0))
-    return all
-  }
+    return roster.sort((a, b) => (a.role === 'teacher' ? -1 : b.role === 'teacher' ? 1 : 0))
+  }, [localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user?.name, user?.role])
 
-  const participants = buildParticipants()
-  const teacher = participants.find(p => p.role === 'teacher')
-  const students = participants.filter(p => p.role !== 'teacher')
-  const cameraOnParticipants = participants.filter(p => p.videoOn)
-  const cameraOnCount = cameraOnParticipants.length
-  const studentCameraOnCount = students.filter(p => p.videoOn).length
+  const teacher = participants.find(participant => participant.role === 'teacher') || null
+  const students = participants.filter(participant => participant.role !== 'teacher')
+  const visibleStudents = students.filter(student => student.videoOn)
+  const hiddenStudents = students.filter(student => !student.videoOn)
+  const selfPreview = user?.role === 'student' && localStream ? {
+    id: 'self-preview',
+    stream: localStream,
+    name: user?.name || 'You',
+    role: user?.role,
+    isLocal: true,
+    videoOn: localVideoOn,
+    micOn: localMicOn,
+  } : null
 
-  // ─── Determine layout mode (Google Meet style - speaker focus) ───
-  // Speaker gets 70% of screen, others get 30% in grid
-  const getLayoutMode = () => {
-    if (isScreenSharing) return 'screen-share'
-    if (teacher && studentCameraOnCount === 0) return 'teacher-full'
-    if (cameraOnCount >= 1) return 'speaker-focus'  // All modes use speaker focus except screen share
-    return 'empty'
-  }
+  const speakerCandidates = useMemo(
+    () => [teacher, ...visibleStudents, selfPreview].filter(Boolean),
+    [teacher, visibleStudents, selfPreview]
+  )
+  const activeSpeakerId = useActiveSpeaker(speakerCandidates)
 
-  const layoutMode = getLayoutMode()
+  const mainStream = isScreenSharing && screenShareStream ? screenShareStream : teacher?.stream || null
+  const mainName = isScreenSharing ? (teacher?.name || 'Screen share') : (teacher?.name || 'Teacher')
+  const mainVideoOn = isScreenSharing ? true : teacher?.videoOn
 
-  // ─── Grid column calculation for multi-user layout ───
-  const getGridStyle = (count) => {
-    if (count <= 1) return { gridTemplateColumns: 'repeat(1, 1fr)' }
-    if (count === 2) return { gridTemplateColumns: 'repeat(2, 1fr)' }
-    if (count <= 4) return { gridTemplateColumns: 'repeat(2, 1fr)' }
-    if (count <= 6) return { gridTemplateColumns: 'repeat(3, 1fr)' }
-    return { gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }
-  }
-
-  // ─── Students with camera ON (for bottom thumbnails) ───
-  const studentsWithCamera = students.filter(s => s.videoOn)
-  const presentingStream = teacher?.isLocal && screenShareStream ? screenShareStream : teacher?.stream
+  const renderTile = (participant, size = 'normal') => (
+    <VideoTile
+      key={participant.id}
+      stream={participant.stream}
+      name={participant.name}
+      role={participant.role}
+      isLocal={participant.isLocal}
+      videoOn={participant.videoOn}
+      micOn={participant.micOn}
+      size={size}
+      fit="contain"
+      isScreenShare={false}
+      isActiveSpeaker={activeSpeakerId === participant.id}
+    />
+  )
 
   return (
-    <div className="w-full h-full flex flex-col relative overflow-hidden">
-      {/* Audio player — always renders for all remote streams */}
+    <div className="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_32%),linear-gradient(180deg,_rgba(3,7,18,0.98),_rgba(3,7,18,1))]">
       <RemoteAudioPlayer remoteStreams={remoteStreams} />
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* LAYOUT: SCREEN SHARE MODE                                        */}
-      {/* Teacher screen as main, all participants as thumbnails at bottom  */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {layoutMode === 'screen-share' && (
-        <>
-          {/* Main screen share area */}
-          <div className="flex-1 min-h-0 p-0 sm:p-2">
-            {teacher && (
-              <div className="screen-share-container w-full h-full sm:rounded-xl overflow-hidden relative bg-black">
-                <video
-                  autoPlay
-                  playsInline
-                  muted={teacher?.isLocal}
-                  ref={(el) => {
-                    if (el && screenShareStream && el.srcObject !== screenShareStream) {
-                      el.srcObject = screenShareStream
-                    }
-                  }}
-                  className="screen-share-video w-full h-full object-contain"
-                />
-                {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
-              </div>
-            )}
-          </div>
-
-          {/* Participant thumbnails - bottom row */}
-          {cameraOnParticipants.length > 0 && (
-            <div className="absolute bottom-24 sm:bottom-28 left-0 right-0 px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto justify-center" style={{ scrollbarWidth: 'none' }}>
-              {cameraOnParticipants.map(p => (
-                <div key={p.key} className="flex-shrink-0 w-32 h-20 sm:w-40 sm:h-24 rounded-lg overflow-hidden border border-white/10 shadow-lg bg-black/30 backdrop-blur-sm">
-                  <VideoTile stream={p.stream} name={p.name} role={p.role} isLocal={p.isLocal} videoOn={p.videoOn} micOn={p.micOn} size="small" />
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* LAYOUT: TEACHER FULL STAGE                                       */}
-      {/* Teacher fills the stage when students have cameras off           */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {layoutMode === 'teacher-full' && (
-        <div className="w-full h-full p-1.5 sm:p-2">
-          {teacher && (
-            <div className="relative w-full h-full rounded-xl overflow-hidden bg-black shadow-2xl">
+      {isScreenSharing ? (
+        <div className="relative flex-1 min-h-0 p-2 sm:p-3 lg:p-4">
+          <div className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-2xl">
+            {mainStream ? (
               <VideoTile
-                stream={teacher.stream}
-                name={teacher.name}
+                stream={mainStream}
+                name={mainName}
                 role="teacher"
-                isLocal={teacher.isLocal}
-                videoOn={teacher.videoOn}
-                micOn={teacher.micOn}
-                size="normal"
+                isLocal={teacher?.isLocal}
+                videoOn={mainVideoOn}
+                micOn={teacher?.micOn}
+                fit="contain"
+                isScreenShare={true}
+                isActiveSpeaker={activeSpeakerId === teacher?.id || isScreenSharing}
+                className="main-video"
               />
-              {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/10 pointer-events-none" />
-            </div>
-          )}
-          {!teacher && (
-            <div className="w-full h-full rounded-xl bg-gray-950 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-purple-500 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xl">
-                  <span className="text-white text-3xl font-bold">T</span>
-                </div>
-                <p className="text-gray-400 text-sm">Waiting for teacher...</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* LAYOUT: SPEAKER FOCUS (Google Meet style)                         */}
-      {/* Speaker (70%) + other participants in grid/thumbnails (30%)        */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {layoutMode === 'speaker-focus' && (
-        <div className="w-full h-full flex flex-col sm:flex-row gap-2 p-1.5 sm:p-2 relative overflow-hidden">
-          {/* Main speaker area (70% on desktop, full on mobile) */}
-          <div className="flex-1 min-h-0 flex flex-col sm:flex-none sm:basis-[70%]">
-            {teacher && (
-              <div className="w-full h-full rounded-xl overflow-hidden">
-                {/* Speaker glow effect indicator */}
-                <div className="relative w-full h-full rounded-xl overflow-hidden">
-                  <VideoTile
-                    stream={teacher.stream}
-                    name={teacher.name}
-                    role="teacher"
-                    isLocal={teacher.isLocal}
-                    videoOn={teacher.videoOn}
-                    micOn={teacher.micOn}
-                    size="normal"
-                  />
-                  {teacher?.isLocal && <canvas ref={canvasRef} className="hidden" />}
-                  {/* Speaker border highlight */}
-                  <div className="absolute inset-0 rounded-xl ring-2 ring-primary-500/30 pointer-events-none" />
-                </div>
-              </div>
-            )}
-            {!teacher && (
-              <div className="w-full h-full bg-gray-950 rounded-xl flex items-center justify-center">
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-black">
                 <div className="text-center">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-purple-500 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xl">
-                    <span className="text-white text-3xl font-bold">T</span>
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 rounded-2xl bg-white/10 flex items-center justify-center">
+                    <MonitorUp className="w-10 h-10 text-white/80" />
                   </div>
-                  <p className="text-gray-400 text-sm">Waiting for teacher...</p>
+                  <p className="text-white font-semibold">Screen share not available</p>
+                  <p className="text-gray-400 text-sm mt-1">Waiting for the teacher to present</p>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Participant thumbnails area (30% on desktop, bottom row on mobile) */}
-          {cameraOnCount > 1 && (
-            <div className="flex sm:flex-col gap-1.5 sm:gap-2 min-h-0 sm:basis-[30%] overflow-x-auto sm:overflow-y-auto pb-24 sm:pb-0">
-              {cameraOnParticipants.filter(p => !p.isTeacher).map(p => (
-                <div
-                  key={p.key}
-                  className="flex-shrink-0 h-20 sm:h-auto sm:flex-1 w-28 sm:w-full aspect-video sm:aspect-auto rounded-lg overflow-hidden border border-white/10 hover:border-white/30 transition-all cursor-pointer hover:shadow-lg"
-                  title={`Click to focus ${p.name}`}
-                >
-                  <VideoTile
-                    stream={p.stream}
-                    name={p.name}
-                    role={p.role}
-                    isLocal={p.isLocal}
-                    videoOn={p.videoOn}
-                    micOn={p.micOn}
-                    size="small"
-                  />
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 backdrop-blur-md border border-white/10">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-white text-xs font-semibold uppercase tracking-wide">Screen sharing</span>
+            </div>
+
+            <div className="students-strip">
+              {visibleStudents.map(student => (
+                <div key={student.id} className="flex-shrink-0 w-36 sm:w-44 h-24 sm:h-28 rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm border border-white/10 shadow-lg">
+                  {renderTile(student, 'small')}
                 </div>
               ))}
+              {hiddenStudents.map(student => (
+                <div key={student.id} className="flex-shrink-0 w-36 sm:w-44 h-24 sm:h-28 rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm border border-white/10 shadow-lg">
+                  {renderTile(student, 'small')}
+                </div>
+              ))}
+              {selfPreview && (
+                <div className="flex-shrink-0 w-36 sm:w-44 h-24 sm:h-28 rounded-2xl overflow-hidden bg-black/50 backdrop-blur-sm border border-white/10 shadow-lg">
+                  {renderTile(selfPreview, 'small')}
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Student self-view thumbnail in speaker-focus (if student and only viewing teacher) */}
-          {user?.role === 'student' && cameraOnCount === 1 && (
-            <div className="absolute bottom-24 sm:bottom-28 right-2 sm:right-3 z-10 w-32 h-20 sm:w-40 sm:h-24 rounded-xl overflow-hidden shadow-2xl border border-white/10 hover:border-white/20 transition-all duration-200">
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col gap-3 p-2 sm:p-3 lg:p-4">
+          <div className="relative min-h-[42vh] flex-[1.2] overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-2xl">
+            {mainStream ? (
               <VideoTile
-                stream={localStream}
-                name={user?.name}
-                role={user?.role}
-                isLocal={true}
-                videoOn={localVideoOn}
-                micOn={localMicOn}
-                size="small"
+                stream={mainStream}
+                name={mainName}
+                role="teacher"
+                isLocal={teacher?.isLocal}
+                videoOn={mainVideoOn}
+                micOn={teacher?.micOn}
+                fit="contain"
+                isScreenShare={false}
+                isActiveSpeaker={activeSpeakerId === teacher?.id}
+                className="main-video"
               />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-black">
+                <div className="text-center">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center shadow-2xl">
+                    <Users className="w-10 h-10 text-white" />
+                  </div>
+                  <p className="text-white font-semibold">Waiting for the teacher</p>
+                  <p className="text-gray-400 text-sm mt-1">Main video will appear here</p>
+                </div>
+              </div>
+            )}
+
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 backdrop-blur-md border border-white/10">
+              <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-white text-xs font-semibold uppercase tracking-wide">Live</span>
             </div>
-          )}
+
+            {selfPreview && (
+              <div className="absolute bottom-4 right-4 z-20 w-32 sm:w-40 h-20 sm:h-24 rounded-2xl overflow-hidden border border-white/15 shadow-xl bg-black/80">
+                {renderTile(selfPreview, 'small')}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 min-h-0 space-y-3">
+            <div>
+              <div className="mb-2 flex items-center justify-between px-1">
+                <h2 className="text-white text-sm font-semibold tracking-wide uppercase">Students</h2>
+                <span className="text-gray-400 text-xs">{visibleStudents.length} active</span>
+              </div>
+              {visibleStudents.length > 0 ? (
+                <div className="students-grid">
+                  {visibleStudents.map(student => (
+                    <div key={student.id} className="min-h-[140px] sm:min-h-[180px] overflow-hidden rounded-2xl bg-black/60 border border-white/10 shadow-lg">
+                      {renderTile(student, 'normal')}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-center text-gray-400">
+                  No student cameras are active yet.
+                </div>
+              )}
+            </div>
+
+            {hiddenStudents.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <h3 className="text-white text-xs font-semibold tracking-wide uppercase">Camera off</h3>
+                  <span className="text-gray-400 text-xs">{hiddenStudents.length}</span>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {hiddenStudents.map(student => (
+                    <div key={student.id} className="flex-shrink-0 w-36 sm:w-44 h-24 sm:h-28 rounded-2xl overflow-hidden bg-black/60 border border-white/10">
+                      {renderTile(student, 'small')}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
-      {/* ── Self-view PIP (students only when alone) ── */}
-      {user?.role === 'student' && cameraOnCount === 1 && layoutMode !== 'speaker-focus' && (
-        <>
-          <div className="absolute bottom-24 sm:bottom-28 right-2 sm:right-3 z-10 w-32 h-20 sm:w-40 sm:h-24 rounded-xl overflow-hidden shadow-2xl border border-white/10 hover:border-white/20 transition-all duration-200 cursor-pointer">
-            <VideoTile
-              stream={localStream}
-              name={user?.name}
-              role={user?.role}
-              isLocal={true}
-              videoOn={localVideoOn}
-              micOn={localMicOn}
-              size="small"
-            />
-          </div>
-          <canvas ref={canvasRef} className="hidden" />
-        </>
-      )}
-
-      {/* Empty room state */}
-      {Object.keys(remoteStreams).length === 0 && (
+      {!isScreenSharing && participants.length === 0 && (
         <div className="absolute bottom-28 sm:bottom-32 left-1/2 transform -translate-x-1/2 z-10">
           <div className="px-4 py-2 bg-gray-800/90 backdrop-blur-sm rounded-full text-gray-400 text-sm border border-gray-700/50">
             {user?.role === 'teacher' ? 'Waiting for students to join...' : 'Connecting to classroom...'}
