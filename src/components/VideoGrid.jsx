@@ -178,10 +178,10 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
                 <h2 className="text-white text-sm font-semibold tracking-wide uppercase">Students</h2>
                 <span className="text-gray-400 text-xs">{visibleStudents.length} active</span>
               </div>
-              {visibleStudents.length > 0 ? (
+            {visibleStudents.length > 0 ? (
                 <div className="students-grid">
                   {visibleStudents.map(student => (
-                    <div key={student.id} className="min-h-[140px] sm:min-h-[180px] overflow-hidden rounded-2xl bg-black/60 border border-white/10 shadow-lg transition-all duration-300 hover:shadow-xl hover:border-white/20 hover:scale-105">
+                    <div key={student.id} className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 shadow-lg transition-all duration-300 hover:shadow-xl hover:border-white/20 hover:scale-105 aspect-video flex">
                       {renderTile(student, 'normal')}
                     </div>
                   ))}
@@ -201,7 +201,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {hiddenStudents.map(student => (
-                    <div key={student.id} className="flex-shrink-0 w-36 sm:w-44 h-24 sm:h-28 rounded-2xl overflow-hidden bg-black/60 border border-white/10 transition-all duration-300 hover:shadow-xl hover:border-white/20">
+                    <div key={student.id} className="flex-shrink-0 w-40 sm:w-48 h-28 sm:h-32 rounded-2xl overflow-hidden bg-black/60 border border-white/10 transition-all duration-300 hover:shadow-xl hover:border-white/20">
                       {renderTile(student, 'small')}
                     </div>
                   ))}
