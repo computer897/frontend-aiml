@@ -169,10 +169,10 @@ function PreJoinScreen({ classData, user, onJoin, onLeave }) {
         </div>
         {/* Simple Join/Cancel Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
-          <button onClick={handleJoin} disabled={loading} className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-semibold disabled:opacity-50">
+          <button type="button" onClick={handleJoin} disabled={loading} className="flex-1 px-6 py-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-semibold disabled:opacity-50">
             {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : user?.role === 'teacher' ? 'Start Meeting' : 'Join Now'}
           </button>
-          <button onClick={onLeave} className="px-6 py-3 bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition font-medium">
+          <button type="button" onClick={onLeave} className="px-6 py-3 bg-gray-700 text-gray-300 rounded-full hover:bg-gray-600 transition font-medium">
             Cancel
           </button>
         </div>
@@ -242,7 +242,7 @@ function WaitingRoom({ classData, onClassStarted, onLeave }) {
           <p className="text-gray-400 text-xs sm:text-sm">You&apos;ll be connected automatically once the session begins.</p>
         </div>
 
-        <button onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
+        <button type="button" onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
           Leave
         </button>
       </div>
@@ -308,7 +308,7 @@ function WaitingForApprovalScreen({ classData, onLeave, connectionState }) {
           )}
         </div>
 
-        <button onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
+        <button type="button" onClick={onLeave} className="px-5 py-2.5 sm:px-6 sm:py-3 bg-gray-700 text-gray-300 rounded-xl hover:bg-gray-600 transition font-medium text-sm">
           Leave
         </button>
       </div>
@@ -330,7 +330,7 @@ function JoinRejectedScreen({ classData, onLeave }) {
           The host has denied your request to join this meeting.
         </p>
 
-        <button onClick={onLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={onLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -521,7 +521,7 @@ function TeacherLeftBanner({ onLeave }) {
         </div>
         <h2 className="text-white text-xl font-semibold mb-2">The teacher has left</h2>
         <p className="text-gray-400 text-sm mb-6">The host ended the meeting. You will be redirected to the dashboard.</p>
-        <button onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -539,7 +539,7 @@ function RemovedBanner({ onLeave }) {
         </div>
         <h2 className="text-white text-xl font-semibold mb-2">You&apos;ve been removed</h2>
         <p className="text-gray-400 text-sm mb-6">The host has removed you from this meeting.</p>
-        <button onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -1422,15 +1422,32 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
         const msg = JSON.parse(event.data)
         if ((msg.type === 'engagement-update' || msg.type === 'engagement_update') && msg.data) {
           const d = msg.data
+
+          // Extract presence based on:
+          // 1. is_present: boolean sent by frontend (true if status !== 'not-detected')
+          // 2. is_face_detected: boolean derived from status (true if status !== 'not-detected')
+          // Both must be true for student to show as PRESENT
+          const isPresent = d.is_present !== false && d.is_face_detected !== false
+
+          console.debug('[Classroom] Engagement update:', {
+            student_id: d.student_id,
+            student_name: d.student_name,
+            status: d.status,
+            is_present: d.is_present,
+            is_face_detected: d.is_face_detected,
+            resolved_isPresent: isPresent
+          })
+
           setStudents(prev => {
-            const idx = prev.findIndex(s => s.id === d.student_id)
-            const isPresent = d.is_present !== false && d.is_face_detected !== false
+            const idx = prev.findIndex(s => s.id === d.student_id || s.id === d.studentId)
             const entry = {
-              id: d.student_id,
-              name: d.student_name || 'Student',
-              isPresent,
-              status: isPresent ? 'active' : 'inactive',
+              id: d.student_id || d.studentId,
+              name: d.student_name || d.studentName || 'Student',
+              isPresent: isPresent, // CRITICAL: Based on face detection, not camera visibility
+              status: isPresent ? 'active' : 'inactive', // active = face detected, inactive = no face
               lookingAtScreen: d.is_looking_at_screen,
+              cameraOn: d.cameraOn, // May differ from isPresent
+              engagementStatus: d.status, // 'attentive', 'distracted', or 'not-detected'
             }
             if (idx >= 0) {
               const u = [...prev]
@@ -1733,9 +1750,13 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           {/* Hidden video element for local stream (needed for canvas capture) */}
           <video ref={localVideoRef} autoPlay playsInline muted className="hidden" />
 
-          {/* Hidden video element for attendance tracking (separate from WebRTC) */}
+          {/* Hidden video element for attendance tracking (separate from WebRTC)
+          * IMPORTANT: This video runs independently of camera on/off toggle
+          * Face detection continues even when videoOn=false (camera display off)
+          * This ensures presence is tracked based on face detection, not camera visibility
+          */}
           {user?.role === 'student' && (
-            <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" />
+            <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" style={{ display: 'none' }} />
           )}
 
           {/* ── Top Bar Overlay (Google Meet style – transparent gradient) ── */}
@@ -2009,7 +2030,7 @@ function Classroom({ user }) {
   const handleLeave = useCallback((navigationState = null) => {
     navigate(
       user.role === 'student' ? '/student-dashboard' : '/teacher-dashboard',
-      navigationState ? { state: navigationState } : undefined
+      navigationState ? { replace: true, state: navigationState } : { replace: true }
     )
   }, [navigate, user.role])
 
