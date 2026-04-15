@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Users } from 'lucide-react'
 import VideoTile from './VideoTile'
 import RemoteAudioPlayer from './RemoteAudioPlayer'
@@ -6,7 +6,15 @@ import { useActiveSpeaker } from '../hooks/useActiveSpeaker'
 
 // ─── Google Meet Video Grid ─────────────────────────────────────────────────
 
-// Dynamic grid column calculation for desktop (lg and above)
+// Mobile layout: exactly matches Google Meet behavior
+const getMobileLayout = (count) => {
+  if (count === 1) return 'grid-cols-1 grid-rows-1'
+  if (count === 2) return 'grid-cols-1 grid-rows-2'
+  if (count <= 4) return 'grid-cols-2 grid-rows-2'
+  return 'grid-cols-2 auto-rows-max'
+}
+
+// Desktop grid column calculation
 const getGridCols = (count) => {
   if (count === 1) return 'lg:grid-cols-1'
   if (count === 2) return 'lg:grid-cols-2'
@@ -17,6 +25,17 @@ const getGridCols = (count) => {
 }
 
 function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing, screenShareStream }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+
+  // Detect mobile/tablet screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   // Build unified participant roster (no role hierarchy)
   const allParticipants = useMemo(() => {
     const roster = []
@@ -116,25 +135,38 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
   // Standard grid mode: mobile-first responsive layout
   const totalParticipants = allParticipants.length
-  const desktopGridColsClass = getGridCols(totalParticipants)
+  const mobileLayoutClass = getMobileLayout(totalParticipants)
+  const desktopLayoutClass = getGridCols(totalParticipants)
 
   return (
     <div className="meet-container w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,_rgba(3,7,18,0.95),_rgba(3,7,18,1))]">
       <RemoteAudioPlayer remoteStreams={remoteStreams} />
 
       {totalParticipants > 0 ? (
-        <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-hidden">
-          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 ${desktopGridColsClass}`}>
+        <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-auto">
+          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${isMobile ? mobileLayoutClass : `grid-cols-2 sm:grid-cols-2 md:grid-cols-3 ${desktopLayoutClass}`}`}>
             {allParticipants.map(participant => (
               <div
                 key={participant.id}
-                className={`w-full h-full rounded-2xl overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
+                className={`relative w-full h-full rounded-2xl overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
                   activeSpeakerId === participant.id
                     ? 'border-blue-400 shadow-lg shadow-blue-400/50'
                     : 'border-white/10 hover:border-white/20 hover:shadow-lg'
                 }`}
               >
                 {renderTile(participant)}
+
+                {/* Name badge at bottom-left */}
+                <div className="absolute bottom-2 left-2 z-10 text-white text-xs font-medium truncate">
+                  {participant.name}
+                </div>
+
+                {/* Mute indicator at bottom-right */}
+                {!participant.micOn && (
+                  <div className="absolute bottom-2 right-2 z-10 text-red-400 text-xs">
+                    🔇
+                  </div>
+                )}
               </div>
             ))}
           </div>
