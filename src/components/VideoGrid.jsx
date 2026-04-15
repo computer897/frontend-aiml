@@ -6,23 +6,14 @@ import { useActiveSpeaker } from '../hooks/useActiveSpeaker'
 
 // ─── Google Meet Video Grid ─────────────────────────────────────────────────
 
-// Dynamic grid column calculation based on participant count
+// Dynamic grid column calculation for desktop (lg and above)
 const getGridCols = (count) => {
-  if (count === 1) return 'grid-cols-1'
-  if (count === 2) return 'grid-cols-2'
-  if (count <= 4) return 'grid-cols-2'
-  if (count <= 6) return 'grid-cols-3'
-  if (count <= 9) return 'grid-cols-3'
-  return 'grid-cols-4'
-}
-
-// Dynamic grid row calculation based on participant count
-const getGridRows = (count) => {
-  if (count <= 2) return 'grid-rows-1'
-  if (count <= 4) return 'grid-rows-2'
-  if (count <= 6) return 'grid-rows-2'
-  if (count <= 9) return 'grid-rows-3'
-  return 'grid-rows-4'
+  if (count === 1) return 'lg:grid-cols-1'
+  if (count === 2) return 'lg:grid-cols-2'
+  if (count <= 4) return 'lg:grid-cols-2'
+  if (count <= 6) return 'lg:grid-cols-3'
+  if (count <= 9) return 'lg:grid-cols-3'
+  return 'lg:grid-cols-4'
 }
 
 function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing, screenShareStream }) {
@@ -123,10 +114,9 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
     )
   }
 
-  // Standard grid mode: responsive layout based on participant count
+  // Standard grid mode: mobile-first responsive layout
   const totalParticipants = allParticipants.length
-  const gridColsClass = getGridCols(totalParticipants)
-  const gridRowsClass = getGridRows(totalParticipants)
+  const desktopGridColsClass = getGridCols(totalParticipants)
 
   return (
     <div className="meet-container w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,_rgba(3,7,18,0.95),_rgba(3,7,18,1))]">
@@ -134,7 +124,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
       {totalParticipants > 0 ? (
         <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-hidden">
-          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${gridColsClass} ${gridRowsClass}`}>
+          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 ${desktopGridColsClass}`}>
             {allParticipants.map(participant => (
               <div
                 key={participant.id}
