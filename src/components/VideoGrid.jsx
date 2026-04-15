@@ -86,14 +86,66 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
     />
   )
 
-  // Screen sharing mode: full-screen share with participant strip at bottom
+  // Screen sharing mode
   if (isScreenSharing && screenShareStream) {
+    // Mobile: Full-screen share with floating participant tiles at bottom
+    if (isMobile) {
+      return (
+        <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden bg-black">
+          <RemoteAudioPlayer remoteStreams={remoteStreams} />
+
+          {/* Main screen share - full height */}
+          <div className="flex-1 min-h-0 relative p-2">
+            <div className="relative h-full w-full overflow-hidden rounded-xl border border-white/10 bg-black">
+              <VideoTile
+                stream={screenShareStream}
+                name="Screen share"
+                role="teacher"
+                isLocal={false}
+                videoOn={true}
+                micOn={false}
+                fit="contain"
+                isScreenShare={true}
+                isActiveSpeaker={true}
+              />
+
+              {/* Screen sharing indicator */}
+              <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-full bg-black/60 px-2.5 py-1 backdrop-blur-md border border-white/10 shadow-lg">
+                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-white text-xs font-semibold uppercase tracking-wide">Sharing</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Participants strip at bottom - horizontal scroll */}
+          {allParticipants.length > 0 && (
+            <div className="px-2 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
+              {allParticipants.map(participant => (
+                <div
+                  key={participant.id}
+                  className={`flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden bg-black/80 border-2 transition-all duration-300 ${
+                    activeSpeakerId === participant.id
+                      ? 'border-blue-400 shadow-lg shadow-blue-400/50'
+                      : 'border-white/10'
+                  }`}
+                >
+                  {renderTile(participant)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Desktop: Screen share as main content with participants side panel
     return (
-      <div className="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,_rgba(3,7,18,0.95),_rgba(3,7,18,1))]">
+      <div className="w-full h-full min-h-0 flex overflow-hidden bg-black">
         <RemoteAudioPlayer remoteStreams={remoteStreams} />
 
-        <div className="relative flex-1 min-h-0 p-2 sm:p-3 lg:p-4">
-          <div className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-2xl">
+        {/* Main screen share area */}
+        <div className="relative flex-1 min-h-0 p-4">
+          <div className="relative h-full w-full overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
             <VideoTile
               stream={screenShareStream}
               name="Screen share"
@@ -106,29 +158,31 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
               isActiveSpeaker={true}
             />
 
+            {/* Screen sharing indicator */}
             <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 backdrop-blur-md border border-white/10 shadow-lg">
               <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
               <span className="text-white text-xs font-semibold uppercase tracking-wide">Screen sharing</span>
             </div>
-
-            {allParticipants.length > 0 && (
-              <div className="absolute bottom-4 left-4 right-4 z-20 flex gap-2 overflow-x-auto scrollbar-hide">
-                {allParticipants.map(participant => (
-                  <div
-                    key={participant.id}
-                    className={`flex-shrink-0 w-32 sm:w-40 h-20 sm:h-24 rounded-lg overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
-                      activeSpeakerId === participant.id
-                        ? 'border-blue-400 shadow-lg shadow-blue-400/50'
-                        : 'border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    {renderTile(participant)}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Participants side panel */}
+        {allParticipants.length > 0 && (
+          <div className="w-40 min-h-0 flex flex-col gap-2 p-4 overflow-y-auto bg-black/50 border-l border-white/10">
+            {allParticipants.map(participant => (
+              <div
+                key={participant.id}
+                className={`flex-shrink-0 h-28 rounded-lg overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
+                  activeSpeakerId === participant.id
+                    ? 'border-blue-400 shadow-lg shadow-blue-400/50'
+                    : 'border-white/10 hover:border-white/20'
+                }`}
+              >
+                {renderTile(participant)}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
