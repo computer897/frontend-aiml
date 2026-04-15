@@ -91,39 +91,40 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
     // Mobile: Full-screen share with floating participant tiles at bottom
     if (isMobile) {
       return (
-        <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden bg-black">
+        <div className="relative w-full h-full min-h-0 overflow-hidden bg-black">
           <RemoteAudioPlayer remoteStreams={remoteStreams} />
 
-          {/* Main screen share - full height */}
-          <div className="flex-1 min-h-0 relative p-2">
-            <div className="relative h-full w-full overflow-hidden rounded-xl border border-white/10 bg-black">
-              <VideoTile
-                stream={screenShareStream}
-                name="Screen share"
-                role="teacher"
-                isLocal={false}
-                videoOn={true}
-                micOn={false}
-                fit="contain"
-                isScreenShare={true}
-                isActiveSpeaker={true}
-              />
+          {/* Main screen share - edge to edge */}
+          <div className="absolute inset-0 z-0">
+            <VideoTile
+              stream={screenShareStream}
+              name="Screen share"
+              role="teacher"
+              isLocal={false}
+              videoOn={true}
+              micOn={false}
+              fit="contain"
+              isScreenShare={true}
+              isActiveSpeaker={true}
+            />
 
-              {/* Screen sharing indicator */}
-              <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-full bg-black/60 px-2.5 py-1 backdrop-blur-md border border-white/10 shadow-lg">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-white text-xs font-semibold uppercase tracking-wide">Sharing</span>
-              </div>
+            {/* Screen sharing indicator */}
+            <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-full bg-black/60 px-2.5 py-1 backdrop-blur-md border border-white/10 shadow-lg">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-white text-xs font-semibold uppercase tracking-wide">Sharing</span>
             </div>
           </div>
 
+          {/* Bottom overlay improves readability above thumbnails */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+
           {/* Participants strip at bottom - horizontal scroll */}
           {allParticipants.length > 0 && (
-            <div className="px-2 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
+            <div className="absolute inset-x-0 bottom-0 z-20 px-2 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
               {allParticipants.map(participant => (
                 <div
                   key={participant.id}
-                  className={`flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden bg-black/80 border-2 transition-all duration-300 ${
+                  className={`flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden bg-black/80 border-2 shadow-lg transition-all duration-300 ${
                     activeSpeakerId === participant.id
                       ? 'border-blue-400 shadow-lg shadow-blue-400/50'
                       : 'border-white/10'
