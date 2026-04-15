@@ -737,7 +737,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
   const [isStudentApproved, setIsStudentApproved] = useState(user?.role === 'teacher')
 
   // Waiting room states - Students start in waiting state by default
-  const [waitingForApproval, setWaitingForApproval] = useState(user?.role === 'student')
+  const [waitingForApproval, setWaitingForApproval] = useState(false)
   const [joinRejected, setJoinRejected] = useState(false)
   const [joinRequests, setJoinRequests] = useState([]) // Teacher's waiting list
 
@@ -1135,45 +1135,46 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
       }
 
       // Student: approved to join
+      const startStudentAttendance = async () => {
+        if (user?.role !== 'student' || !consentGiven) return
+
+        try {
+          let activeSessionId = classData?.active_session_id || initialSessionId
+          let resolvedClassData = classData
+
+          if (!activeSessionId && classData?.class_id) {
+            const latestClass = await classAPI.get(classData.class_id)
+            resolvedClassData = latestClass
+            activeSessionId = latestClass?.active_session_id || null
+          }
+
+          if (!activeSessionId) {
+            console.error('Missing active session ID for class attendance tracking')
+            return
+          }
+
+          setSessionId(activeSessionId)
+
+          await attendanceAPI.start(resolvedClassData.class_id, activeSessionId, {
+            classTitle: resolvedClassData?.title,
+            teacherName: resolvedClassData?.teacher_name,
+            startedAt: resolvedClassData?.session_started_at,
+          })
+
+          console.log('[Classroom] Attendance session started')
+          initializeFaceTracking(activeSessionId)
+        } catch (err) {
+          console.error('Failed to start attendance:', err)
+        }
+      }
+
       rtc.callbacks.onJoinApproved = () => {
         console.log('[Classroom] Join approved!')
         setWaitingForApproval(false)
         setJoinRejected(false)
         // Activate the engagement detection hook
         setIsStudentApproved(true)
-        // Start attendance and face tracking after approval (student with consent)
-        if (user?.role === 'student' && consentGiven) {
-          ;(async () => {
-            try {
-              let activeSessionId = classData?.active_session_id || initialSessionId
-              let resolvedClassData = classData
-
-              if (!activeSessionId && classData?.class_id) {
-                const latestClass = await classAPI.get(classData.class_id)
-                resolvedClassData = latestClass
-                activeSessionId = latestClass?.active_session_id || null
-              }
-
-              if (!activeSessionId) {
-                console.error('Missing active session ID for class attendance tracking')
-                return
-              }
-
-              setSessionId(activeSessionId)
-
-              await attendanceAPI.start(resolvedClassData.class_id, activeSessionId, {
-                classTitle: resolvedClassData?.title,
-                teacherName: resolvedClassData?.teacher_name,
-                startedAt: resolvedClassData?.session_started_at,
-              })
-
-              console.log('[Classroom] Attendance session started')
-              initializeFaceTracking(activeSessionId)
-            } catch (err) {
-              console.error('Failed to start attendance:', err)
-            }
-          })()
-        }
+        startStudentAttendance()
       }
 
       // Initialize face detection for attendance (browser-side only)
@@ -1283,6 +1284,8 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
       }
 
       // Join the room
+      const bypassApproval = user?.role === 'student' && (classData?.is_active === true || !!classData?.session_started_at)
+
       if (stream) {
         try {
           console.log('[Classroom] Attempting to join WebRTC room:', {
@@ -1299,10 +1302,18 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
             user?.id || user?._id,
             user?.name,
             stream,
-            token
+            token,
+            { bypassApproval }
           )
           
           console.log('[Classroom] Successfully called joinRoom')
+
+          if (bypassApproval) {
+            setWaitingForApproval(false)
+            setJoinRejected(false)
+            setIsStudentApproved(true)
+            await startStudentAttendance()
+          }
         } catch (err) {
           console.error('[Classroom] Error joining room:', err)
           setError(`Failed to connect to classroom: ${err.message}`)
