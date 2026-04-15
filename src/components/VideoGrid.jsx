@@ -188,7 +188,12 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
   }
 
   // Standard grid mode: mobile-first responsive layout
-  const totalParticipants = allParticipants.length
+  const hostParticipant = allParticipants.find(participant => participant.role === 'teacher')
+  const hasAnyStudentVideoOn = allParticipants.some(participant => participant.role === 'student' && participant.videoOn)
+  const shouldFocusHost = Boolean(hostParticipant) && !hasAnyStudentVideoOn
+  const visibleParticipants = shouldFocusHost && hostParticipant ? [hostParticipant] : allParticipants
+
+  const totalParticipants = visibleParticipants.length
   const mobileLayoutClass = getMobileLayout(totalParticipants)
   const desktopLayoutClass = getGridCols(totalParticipants)
 
@@ -199,7 +204,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       {totalParticipants > 0 ? (
         <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-auto">
           <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${isMobile ? mobileLayoutClass : `md:grid-cols-3 ${desktopLayoutClass}`}`}>
-            {allParticipants.map(participant => (
+            {visibleParticipants.map(participant => (
               <div
                 key={participant.id}
                 className={`relative w-full h-full rounded-2xl overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
