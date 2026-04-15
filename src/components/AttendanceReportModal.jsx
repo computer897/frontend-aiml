@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Download, Users, CheckCircle, AlertCircle, Percent } from 'lucide-react'
-import { attendanceAPI } from '../services/api'
+import { attendanceAPI, downloadBlob } from '../services/api'
 
 /**
  * Shows the finalized attendance report after the teacher ends the class.
@@ -18,6 +18,11 @@ import { attendanceAPI } from '../services/api'
  */
 function AttendanceReportModal({ report = [], endTime, classTitle, classId, sessionId, onClose, autoDownload = false }) {
   const endDate = endTime ? new Date(endTime) : new Date()
+  const [downloading, setDownloading] = useState(false)
+  const handleClose = (event) => {
+    event?.preventDefault?.()
+    onClose?.()
+  }
 
   // ── Summary stats ──
   const total = report.length
@@ -38,18 +43,14 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
   const handleDownloadCSV = async () => {
     if (!classId || !sessionId) return
 
+    setDownloading(true)
     try {
       const blob = await attendanceAPI.exportCsv(classId, sessionId)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance_${classId}_${sessionId}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, `attendance_${classId}_${sessionId}.csv`)
     } catch (error) {
       alert(error.message || 'Failed to download attendance report')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -61,8 +62,8 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
   }, [autoDownload, classId, sessionId])
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={handleClose}>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(event) => event.stopPropagation()}>
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 flex-shrink-0">
@@ -73,7 +74,7 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
               Class ended at {endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on {endDate.toLocaleDateString()}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 hover:bg-gray-700 rounded-full transition">
+          <button type="button" onClick={handleClose} onTouchEnd={handleClose} className="p-2 hover:bg-gray-700 rounded-full transition">
             <X className="w-4 h-4 text-gray-400" />
           </button>
         </div>
@@ -168,18 +169,29 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-700 flex-shrink-0 bg-gray-800/50">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
+            onTouchEnd={handleClose}
             className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl text-sm font-medium transition"
           >
             Close
           </button>
           <button
+            type="button"
             onClick={handleDownloadCSV}
-            disabled={report.length === 0 || !classId || !sessionId}
+            disabled={downloading || report.length === 0 || !classId || !sessionId}
             className="flex items-center gap-2 px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition shadow-lg shadow-primary-600/25"
           >
-            <Download className="w-4 h-4" />
-            Download CSV
+            {downloading ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Download CSV
+              </>
+            )}
           </button>
         </div>
       </div>

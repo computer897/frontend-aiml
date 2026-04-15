@@ -1,5 +1,5 @@
 import { Radio, Download, Users, FileText } from 'lucide-react'
-import { attendanceAPI } from '../services/api'
+import { attendanceAPI, downloadBlob } from '../services/api'
 
 function EngagementList({ students, onSelectStudent, classId, sessionId }) {
   const sortedStudents = [...students].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
@@ -17,14 +17,7 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
 
     try {
       const blob = await attendanceAPI.exportCSV(classId, sessionId)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance_${classId}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, `attendance_${classId}_${new Date().toISOString().split('T')[0]}.csv`)
     } catch (err) {
       console.error('Failed to export CSV:', err)
       alert('Failed to export attendance CSV. Please try again.')
@@ -40,14 +33,7 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
 
     try {
       const blob = await attendanceAPI.exportExcel(classId, sessionId)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance_${classId}_${new Date().toISOString().split('T')[0]}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, `attendance_${classId}_${new Date().toISOString().split('T')[0]}.xlsx`)
     } catch (err) {
       console.error('Failed to export Excel:', err)
       alert('Failed to export attendance Excel file. Please try again.')

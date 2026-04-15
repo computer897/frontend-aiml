@@ -318,6 +318,11 @@ function WaitingForApprovalScreen({ classData, onLeave, connectionState }) {
 
 // ─── Join Rejected Screen ────────────────────────────────────────────────────
 function JoinRejectedScreen({ classData, onLeave }) {
+  const handleLeave = (event) => {
+    event?.preventDefault?.()
+    onLeave?.()
+  }
+
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 safe-bottom">
       <div className="max-w-lg w-full text-center">
@@ -330,7 +335,7 @@ function JoinRejectedScreen({ classData, onLeave }) {
           The host has denied your request to join this meeting.
         </p>
 
-        <button type="button" onClick={onLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={handleLeave} onTouchEnd={handleLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -430,6 +435,10 @@ function JoinRequestModal({ requests, onAccept, onReject, onAcceptAll, onRejectA
 // ─── Class Finished Screen ───────────────────────────────────────────────────
 function ClassFinishedScreen({ classData, onLeave }) {
   const endTime = classData?.ended_at ? new Date(classData.ended_at) : new Date()
+  const handleLeave = (event) => {
+    event?.preventDefault?.()
+    onLeave?.()
+  }
   
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
@@ -494,7 +503,8 @@ function ClassFinishedScreen({ classData, onLeave }) {
           {/* Action Button */}
           <div className="px-8 pb-8">
             <button
-              onClick={onLeave}
+              onClick={handleLeave}
+              onTouchEnd={handleLeave}
               className="w-full py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg shadow-primary-600/25 hover:shadow-primary-500/40"
             >
               Return to Dashboard
@@ -513,6 +523,11 @@ function ClassFinishedScreen({ classData, onLeave }) {
 
 // ─── Teacher Left Banner ─────────────────────────────────────────────────────
 function TeacherLeftBanner({ onLeave }) {
+  const handleLeave = (event) => {
+    event?.preventDefault?.()
+    onLeave?.()
+  }
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center border border-gray-700">
@@ -521,7 +536,7 @@ function TeacherLeftBanner({ onLeave }) {
         </div>
         <h2 className="text-white text-xl font-semibold mb-2">The teacher has left</h2>
         <p className="text-gray-400 text-sm mb-6">The host ended the meeting. You will be redirected to the dashboard.</p>
-        <button type="button" onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={handleLeave} onTouchEnd={handleLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -531,6 +546,11 @@ function TeacherLeftBanner({ onLeave }) {
 
 // ─── Removed From Room Banner ────────────────────────────────────────────────
 function RemovedBanner({ onLeave }) {
+  const handleLeave = (event) => {
+    event?.preventDefault?.()
+    onLeave?.()
+  }
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center border border-gray-700">
@@ -539,7 +559,7 @@ function RemovedBanner({ onLeave }) {
         </div>
         <h2 className="text-white text-xl font-semibold mb-2">You&apos;ve been removed</h2>
         <p className="text-gray-400 text-sm mb-6">The host has removed you from this meeting.</p>
-        <button type="button" onClick={onLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
+        <button type="button" onClick={handleLeave} onTouchEnd={handleLeave} className="px-6 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>
@@ -549,6 +569,11 @@ function RemovedBanner({ onLeave }) {
 
 // ─── Class Not Found / Error Screen ──────────────────────────────────────────
 function ClassNotFoundScreen({ onLeave }) {
+  const handleLeave = (event) => {
+    event?.preventDefault?.()
+    onLeave?.()
+  }
+
   return (
     <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 safe-bottom">
       <div className="max-w-lg w-full text-center">
@@ -561,7 +586,7 @@ function ClassNotFoundScreen({ onLeave }) {
           This classroom could not be loaded. The class may have been deleted or you don&apos;t have access to it.
         </p>
 
-        <button onClick={onLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
+        <button onClick={handleLeave} onTouchEnd={handleLeave} className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium">
           Return to Dashboard
         </button>
       </div>

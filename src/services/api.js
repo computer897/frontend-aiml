@@ -139,6 +139,29 @@ const apiDownload = async (endpoint, options = {}) => {
   return response.blob()
 }
 
+export const downloadBlob = (blob, filename) => {
+  if (!(blob instanceof Blob)) {
+    throw new Error('No file was returned from the server.')
+  }
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.rel = 'noopener noreferrer'
+  link.style.display = 'none'
+  document.body.appendChild(link)
+
+  try {
+    link.click()
+  } finally {
+    window.setTimeout(() => {
+      link.remove()
+      URL.revokeObjectURL(url)
+    }, 1500)
+  }
+}
+
 // Authentication APIs
 export const authAPI = {
   register: async (name, email, password, role) => {
