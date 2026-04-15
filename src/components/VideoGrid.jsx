@@ -11,7 +11,7 @@ const getMobileLayout = (count) => {
   if (count === 1) return 'grid-cols-1 grid-rows-1'
   if (count === 2) return 'grid-cols-1 grid-rows-2'
   if (count <= 4) return 'grid-cols-2 grid-rows-2'
-  return 'grid-cols-2 auto-rows-max'
+  return 'grid-cols-2 auto-rows-fr'
 }
 
 // Desktop grid column calculation
@@ -198,7 +198,7 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
 
       {totalParticipants > 0 ? (
         <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-auto">
-          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${isMobile ? mobileLayoutClass : `grid-cols-2 sm:grid-cols-2 md:grid-cols-3 ${desktopLayoutClass}`}`}>
+          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${isMobile ? mobileLayoutClass : `md:grid-cols-3 ${desktopLayoutClass}`}`}>
             {allParticipants.map(participant => (
               <div
                 key={participant.id}
