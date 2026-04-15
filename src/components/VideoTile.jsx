@@ -39,7 +39,7 @@ const VideoTile = memo(function VideoTile({ stream, name, role, isLocal, videoOn
         autoPlay
         playsInline
         muted={isLocal}
-        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${fit === 'contain' ? 'main-video object-contain bg-black' : 'object-contain bg-black'} ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute inset-0 w-full h-full transition-opacity duration-300 ${fit === 'contain' ? 'object-contain bg-black' : 'object-cover bg-black'} ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         style={mirror ? { transform: 'scaleX(-1)' } : undefined}
       />
       {/* Avatar fallback when camera is off */}

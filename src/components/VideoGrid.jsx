@@ -1,10 +1,30 @@
 import { useMemo } from 'react'
-import { MonitorUp, Users } from 'lucide-react'
+import { Users } from 'lucide-react'
 import VideoTile from './VideoTile'
 import RemoteAudioPlayer from './RemoteAudioPlayer'
 import { useActiveSpeaker } from '../hooks/useActiveSpeaker'
 
 // ─── Google Meet Video Grid ─────────────────────────────────────────────────
+
+// Dynamic grid column calculation based on participant count
+const getGridCols = (count) => {
+  if (count === 1) return 'grid-cols-1'
+  if (count === 2) return 'grid-cols-2'
+  if (count <= 4) return 'grid-cols-2'
+  if (count <= 6) return 'grid-cols-3'
+  if (count <= 9) return 'grid-cols-3'
+  return 'grid-cols-4'
+}
+
+// Dynamic grid row calculation based on participant count
+const getGridRows = (count) => {
+  if (count <= 2) return 'grid-rows-1'
+  if (count <= 4) return 'grid-rows-2'
+  if (count <= 6) return 'grid-rows-2'
+  if (count <= 9) return 'grid-rows-3'
+  return 'grid-rows-4'
+}
+
 function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remoteCameraStatus, user, canvasRef, isScreenSharing, screenShareStream }) {
   // Build unified participant roster (no role hierarchy)
   const allParticipants = useMemo(() => {
@@ -50,12 +70,13 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
       isLocal={participant.isLocal}
       videoOn={participant.videoOn}
       micOn={participant.micOn}
-      fit="contain"
+      fit="cover"
       isScreenShare={false}
       isActiveSpeaker={activeSpeakerId === participant.id}
     />
   )
 
+  // Screen sharing mode: full-screen share with participant strip at bottom
   if (isScreenSharing && screenShareStream) {
     return (
       <div className="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,_rgba(3,7,18,0.95),_rgba(3,7,18,1))]">
@@ -102,23 +123,22 @@ function VideoGrid({ localStream, localVideoOn, localMicOn, remoteStreams, remot
     )
   }
 
+  // Standard grid mode: responsive layout based on participant count
+  const totalParticipants = allParticipants.length
+  const gridColsClass = getGridCols(totalParticipants)
+  const gridRowsClass = getGridRows(totalParticipants)
+
   return (
     <div className="meet-container w-full h-full min-h-0 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,_rgba(3,7,18,0.95),_rgba(3,7,18,1))]">
       <RemoteAudioPlayer remoteStreams={remoteStreams} />
 
-      {allParticipants.length > 0 ? (
-        <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-auto">
-          <div
-            className="grid gap-2 sm:gap-3 lg:gap-4"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-              gridAutoRows: '1fr',
-            }}
-          >
+      {totalParticipants > 0 ? (
+        <div className="video-grid flex-1 min-h-0 p-2 sm:p-3 lg:p-4 overflow-hidden">
+          <div className={`grid w-full h-full gap-2 sm:gap-3 lg:gap-4 ${gridColsClass} ${gridRowsClass}`}>
             {allParticipants.map(participant => (
               <div
                 key={participant.id}
-                className={`rounded-2xl overflow-hidden bg-black/60 border-2 transition-all duration-300 aspect-video flex ${
+                className={`w-full h-full rounded-2xl overflow-hidden bg-black/60 border-2 transition-all duration-300 ${
                   activeSpeakerId === participant.id
                     ? 'border-blue-400 shadow-lg shadow-blue-400/50'
                     : 'border-white/10 hover:border-white/20 hover:shadow-lg'
