@@ -957,6 +957,8 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
             name: data.studentName || 'Student',
             isPresent,
             status: isPresent ? 'active' : 'inactive',
+            engagementStatus: data.status || null,
+            lastEngagementAt: data.timestamp || Date.now(),
             cameraOn: data.cameraOn !== false,
             // Preserve existing joinTime or use server-provided one
             joinTime: data.joinTimeLabel || data.joinTime || null,
@@ -1675,6 +1677,27 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
   // Determine active side panel
   const activeSidePanel = showChat ? 'chat' : showDoubts ? 'doubts' : showEngagement ? 'engagement' : showParticipants ? 'participants' : null
 
+  const engagementDetails = useMemo(() => {
+    const details = {}
+    students.forEach((student) => {
+      if (!student?.id && !student?.name) return
+      const payload = {
+        engagementStatus: student.engagementStatus || null,
+        isPresent: student.isPresent !== false && student.status !== 'inactive',
+        cameraOn: student.cameraOn !== false,
+        lastEngagementAt: student.lastEngagementAt || null,
+      }
+
+      if (student.id) {
+        details[String(student.id)] = payload
+      }
+      if (student.name) {
+        details[String(student.name).toLowerCase()] = payload
+      }
+    })
+    return details
+  }, [students])
+
   // ── Student: Show waiting for approval screen ──
   if (user?.role === 'student' && waitingForApproval) {
     return <WaitingForApprovalScreen classData={classData} onLeave={onLeave} connectionState={connectionState} />
@@ -1701,6 +1724,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           classTitle={classData?.title}
           classId={classData?.class_id}
           sessionId={attendanceReport?.session_id || sessionId}
+          engagementDetails={engagementDetails}
           onClose={() => {
             setShowAttendanceReport(false)
             onLeave({
