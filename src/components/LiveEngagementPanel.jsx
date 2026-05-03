@@ -1,16 +1,32 @@
 import { useState, useEffect } from 'react'
-import { Users, Radio, Eye, EyeOff, AlertTriangle, RefreshCw, Wifi, WifiOff } from 'lucide-react'
+import { Users, Radio, AlertTriangle, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 
 /**
  * LiveEngagementPanel - Real-time student engagement monitoring
- * Shows green/red status dots based on face detection
+ * Shows status dots based on attention_score and face detection
  *
- * Status logic:
- *   - Green dot: Face detected AND looking at screen
- *   - Amber dot: Face detected but NOT looking at screen
- *   - Red dot: No face detected
- *   - Gray dot: Student inactive/disconnected
+ * Status logic (via getEngagementStatus):
+ *   - Green dot: attention_score >= 70 (Focused)
+ *   - Amber dot: attention_score 40-69 (Distracted)
+ *   - Orange dot: attention_score < 40 (Very Distracted)
+ *   - Red dot: No face detected (Absent)
+ *   - Gray dot: Student inactive/disconnected (Offline)
  */
+
+/**
+ * Helper function to determine engagement status based on attention_score
+ * REPLACES the broken looking_at_screen field
+ */
+function getEngagementStatus(student) {
+  if (!student.is_active) return "offline"
+  if (!student.face_detected) return "absent"
+
+  const score = student.attention_score ?? 0
+  if (score >= 70) return "focused"
+  if (score >= 40) return "distracted"
+  return "very_distracted"
+}
+
 function LiveEngagementPanel({
   students = [],
   isActive = false,
@@ -26,43 +42,55 @@ function LiveEngagementPanel({
     student.section?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // Calculate summary stats
+  // Calculate summary stats using correct engagement logic
   const totalStudents = students.length
-  const presentCount = students.filter(s => s.face_detected).length
-  const engagedCount = students.filter(s => s.face_detected && s.looking_at_screen).length
+  const studentStatuses = students.map(getEngagementStatus)
+
+  const engagedCount = studentStatuses.filter(s => s === "focused").length
+  const presentCount = studentStatuses.filter(s => s === "focused" || s === "distracted").length
   const absentCount = totalStudents - presentCount
 
-  // Get status dot color and label
+  // Map engagement status to UI info
   const getStatusInfo = (student) => {
-    if (!student.is_active) {
-      return {
-        dotColor: 'bg-gray-400',
-        ringColor: 'ring-gray-200',
-        label: 'Disconnected',
-        textColor: 'text-gray-500'
-      }
-    }
-    if (student.face_detected && student.looking_at_screen) {
-      return {
-        dotColor: 'bg-green-500',
-        ringColor: 'ring-green-200',
-        label: 'Engaged',
-        textColor: 'text-green-600'
-      }
-    }
-    if (student.face_detected) {
-      return {
-        dotColor: 'bg-amber-500',
-        ringColor: 'ring-amber-200',
-        label: 'Present',
-        textColor: 'text-amber-600'
-      }
-    }
-    return {
-      dotColor: 'bg-red-500',
-      ringColor: 'ring-red-200',
-      label: 'Not Detected',
-      textColor: 'text-red-600'
+    const status = getEngagementStatus(student)
+
+    switch (status) {
+      case "offline":
+        return {
+          dotColor: 'bg-gray-400',
+          ringColor: 'ring-gray-200',
+          label: 'Disconnected',
+          textColor: 'text-gray-500'
+        }
+      case "focused":
+        return {
+          dotColor: 'bg-green-500',
+          ringColor: 'ring-green-200',
+          label: 'Engaged',
+          textColor: 'text-green-600'
+        }
+      case "distracted":
+        return {
+          dotColor: 'bg-amber-500',
+          ringColor: 'ring-amber-200',
+          label: 'Distracted',
+          textColor: 'text-amber-600'
+        }
+      case "very_distracted":
+        return {
+          dotColor: 'bg-orange-500',
+          ringColor: 'ring-orange-200',
+          label: 'Very Distracted',
+          textColor: 'text-orange-600'
+        }
+      case "absent":
+      default:
+        return {
+          dotColor: 'bg-red-500',
+          ringColor: 'ring-red-200',
+          label: 'No Face',
+          textColor: 'text-red-600'
+        }
     }
   }
 
@@ -124,7 +152,7 @@ function LiveEngagementPanel({
           </div>
           <div className="text-center p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
             <p className="text-lg font-bold text-amber-600">{presentCount - engagedCount}</p>
-            <p className="text-[10px] text-amber-600">Present</p>
+            <p className="text-[10px] text-amber-600">Distracted</p>
           </div>
           <div className="text-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
             <p className="text-lg font-bold text-red-600">{absentCount}</p>
@@ -173,10 +201,10 @@ function LiveEngagementPanel({
                   className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 transition"
                 >
                   <div className="flex items-center gap-3">
-                    {/* Status Dot with pulse animation for active students */}
+                    {/* Status Dot with pulse animation for focused students */}
                     <div className="relative">
                       <span className={`w-3 h-3 rounded-full ${status.dotColor} block`} />
-                      {student.face_detected && student.is_active && (
+                      {status.label === 'Engaged' && student.is_active && (
                         <span className={`absolute inset-0 w-3 h-3 rounded-full ${status.dotColor} animate-ping opacity-75`} />
                       )}
                     </div>
@@ -192,17 +220,12 @@ function LiveEngagementPanel({
                     </div>
                   </div>
 
-                  {/* Engagement Percentage */}
+                  {/* Attention Score Percentage */}
                   <div className="text-right">
                     <p className={`text-sm font-semibold ${status.textColor}`}>
-                      {Math.round(student.engagement_percentage || 0)}%
+                      {Math.round(student.attention_score || 0)}%
                     </p>
                     <div className="flex items-center gap-1 mt-1">
-                      {student.looking_at_screen ? (
-                        <Eye className="w-3 h-3 text-green-500" />
-                      ) : (
-                        <EyeOff className="w-3 h-3 text-gray-400" />
-                      )}
                       {student.multiple_faces && (
                         <span className="text-[9px] px-1 py-0.5 bg-amber-100 text-amber-700 rounded">
                           Multiple
@@ -219,14 +242,18 @@ function LiveEngagementPanel({
 
       {/* Legend */}
       <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
-        <div className="flex items-center justify-center gap-4 text-[10px] text-gray-500">
+        <div className="flex items-center justify-center gap-4 text-[10px] text-gray-500 flex-wrap">
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-green-500" />
             <span>Engaged</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Present</span>
+            <span>Distracted</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <span>Very Distracted</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-red-500" />
