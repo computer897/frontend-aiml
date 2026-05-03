@@ -1454,56 +1454,6 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
     }
   }, [micOn])
 
-  // ── Teacher engagement WebSocket ──
-  useEffect(() => {
-    if (user?.role !== 'teacher' || !classData?.class_id) return
-    try {
-      const ws = createWebSocket(classData.class_id)
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if ((msg.type === 'engagement-update' || msg.type === 'engagement_update') && msg.data) {
-          const d = msg.data
-
-          // Presence based on FACE DETECTION, not camera visibility
-          // Backend sends is_present which represents whether face was detected and attentive
-          const cameraOn = d.cameraOn !== false
-          const isPresent = d.is_present === true
-
-          console.debug('[Classroom] Engagement update (WebSocket):', {
-            student_id: d.student_id,
-            student_name: d.student_name,
-            status: d.status,
-            camera_on: cameraOn,
-            is_present: d.is_present,
-            is_face_detected: d.is_face_detected,
-            resolved_isPresent: isPresent
-          })
-
-          setStudents(prev => {
-            const idx = prev.findIndex(s => s.id === d.student_id || s.id === d.studentId)
-            const entry = {
-              id: d.student_id || d.studentId,
-              name: d.student_name || d.studentName || 'Student',
-              isPresent: isPresent, // CRITICAL: Based on face detection, not camera visibility
-              status: isPresent ? 'active' : 'inactive', // active = face detected, inactive = no face
-              lookingAtScreen: d.is_looking_at_screen,
-              cameraOn: cameraOn,
-              engagementStatus: d.status, // 'attentive', 'distracted', or 'not-detected'
-            }
-            if (idx >= 0) {
-              const u = [...prev]
-              u[idx] = { ...u[idx], ...entry }
-              return u
-            }
-            return [...prev, entry]
-          })
-        }
-      }
-      wsRef.current = ws
-    } catch { /* silent */ }
-    return () => wsRef.current?.close()
-  }, [classData?.class_id, user?.role])
-
   // ── Reset unread when chat opens ──
   useEffect(() => {
     if (showChat) setUnreadMessages(0)
@@ -1797,7 +1747,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           * This ensures presence is tracked based on face detection, not camera visibility
           */}
           {user?.role === 'student' && (
-            <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" style={{ display: 'none' }} />
+            <video ref={attendanceVideoRef} autoPlay playsInline muted className="hidden" style={{ visibility: 'hidden', width: '1px', height: '1px', position: 'absolute' }} />
           )}
 
           {/* ── Top Bar Overlay (Google Meet style – transparent gradient) ── */}
