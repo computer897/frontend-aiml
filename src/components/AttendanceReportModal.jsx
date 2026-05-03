@@ -41,14 +41,24 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
 
   // ── Download CSV ──
   const handleDownloadCSV = async () => {
-    if (!classId || !sessionId) return
+    if (!classId) {
+      alert('Class ID is missing. Cannot export.')
+      return
+    }
+    if (!sessionId) {
+      alert('Session ID is missing. Cannot export.')
+      return
+    }
 
     setDownloading(true)
     try {
+      console.log('[AttendanceReportModal] Exporting CSV:', { classId, sessionId })
       const blob = await attendanceAPI.exportCsv(classId, sessionId)
       downloadBlob(blob, `attendance_${classId}_${sessionId}.csv`)
+      console.log('[AttendanceReportModal] CSV export successful')
     } catch (error) {
-      alert(error.message || 'Failed to download attendance report')
+      console.error('[AttendanceReportModal] Export error:', error)
+      alert(error.message || 'Failed to download attendance report. Please check your connection and try again.')
     } finally {
       setDownloading(false)
     }
@@ -178,7 +188,7 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
           <button
             type="button"
             onClick={handleDownloadCSV}
-            disabled={downloading || report.length === 0 || !classId || !sessionId}
+            disabled={downloading}
             className="flex items-center gap-2 px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition shadow-lg shadow-primary-600/25"
           >
             {downloading ? (

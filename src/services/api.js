@@ -368,14 +368,26 @@ export const attendanceAPI = {
   },
 
   exportCSV: async (classId, sessionId) => {
+    if (!classId || !sessionId) {
+      throw new Error('Class ID and Session ID are required for export')
+    }
+    console.log('[API] Exporting attendance CSV:', { classId, sessionId })
     return apiDownload(`/attendance/export/${classId}/${sessionId}`)
   },
 
   exportCsv: async (classId, sessionId) => {
+    if (!classId || !sessionId) {
+      throw new Error('Class ID and Session ID are required for export')
+    }
+    console.log('[API] Exporting attendance CSV:', { classId, sessionId })
     return apiDownload(`/attendance/export/${classId}/${sessionId}`)
   },
 
   exportExcel: async (classId, sessionId) => {
+    if (!classId || !sessionId) {
+      throw new Error('Class ID and Session ID are required for export')
+    }
+    console.log('[API] Exporting attendance Excel:', { classId, sessionId })
     return apiDownload(`/attendance/export-excel/${classId}/${sessionId}`)
   },
 }

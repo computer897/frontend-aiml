@@ -972,14 +972,19 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
         if (user?.role !== 'teacher') return
         setStudents(prev => {
           const idx = prev.findIndex(s => s.id === data.studentId)
-          const isPresent = data.isPresent !== false && data.status !== 'not-detected'
+          const cameraOn = data.cameraOn !== false
+          // Presence based on FACE DETECTION (isPresent), not camera visibility
+          // - isPresent: true when face is detected and student is attentive
+          // - This allows teachers to see who is actually present even if camera is off
+          const isPresent = data.isPresent === true
           const entry = {
             id: data.studentId || data.socketId,
             socketId: data.socketId,
             name: data.studentName || 'Student',
             isPresent,
             status: isPresent ? 'active' : 'inactive',
-            cameraOn: data.cameraOn !== false,
+            cameraOn,
+            engagementStatus: data.status, // 'attentive', 'distracted', or 'not-detected'
             // Preserve existing joinTime or use server-provided one
             joinTime: data.joinTimeLabel || data.joinTime || null,
           }
@@ -1459,16 +1464,16 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
         if ((msg.type === 'engagement-update' || msg.type === 'engagement_update') && msg.data) {
           const d = msg.data
 
-          // Extract presence based on:
-          // 1. is_present: boolean sent by frontend (true if status !== 'not-detected')
-          // 2. is_face_detected: boolean derived from status (true if status !== 'not-detected')
-          // Both must be true for student to show as PRESENT
-          const isPresent = d.is_present !== false && d.is_face_detected !== false
+          // Presence based on FACE DETECTION, not camera visibility
+          // Backend sends is_present which represents whether face was detected and attentive
+          const cameraOn = d.cameraOn !== false
+          const isPresent = d.is_present === true
 
-          console.debug('[Classroom] Engagement update:', {
+          console.debug('[Classroom] Engagement update (WebSocket):', {
             student_id: d.student_id,
             student_name: d.student_name,
             status: d.status,
+            camera_on: cameraOn,
             is_present: d.is_present,
             is_face_detected: d.is_face_detected,
             resolved_isPresent: isPresent
@@ -1482,7 +1487,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
               isPresent: isPresent, // CRITICAL: Based on face detection, not camera visibility
               status: isPresent ? 'active' : 'inactive', // active = face detected, inactive = no face
               lookingAtScreen: d.is_looking_at_screen,
-              cameraOn: d.cameraOn, // May differ from isPresent
+              cameraOn: cameraOn,
               engagementStatus: d.status, // 'attentive', 'distracted', or 'not-detected'
             }
             if (idx >= 0) {
