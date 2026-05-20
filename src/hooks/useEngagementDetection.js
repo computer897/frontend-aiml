@@ -323,9 +323,4 @@ export function useEngagementDetection({ videoRef, webrtcRef, userId, userName, 
     antiCheatingFlags: antiCheatingFlagsRef.current,
   }
 }
-      intervalRef.current = null
-  
-  }, [isActive, runDetection])
 
-  return { faceDetected, modelsLoaded, engagementStatus }
-}
