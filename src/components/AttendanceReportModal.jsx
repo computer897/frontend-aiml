@@ -122,7 +122,7 @@ function AttendanceReportModal({ report = [], endTime, classTitle, classId, sess
               />
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              {presentCount} of {total} students met the 70% presence requirement
+              {presentCount} of {total} students were marked present based on face detection
             </p>
           </div>
         </div>
