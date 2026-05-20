@@ -114,12 +114,12 @@ function TeacherCreateClassroomTab({ onCreateClass, onBack }) {
                 <select value={form.subject} onChange={e => handleChange('subject', e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 bg-white rounded-xl text-gray-900 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
                   <option value="">Select subject</option>
-                  <option>Mathematics</option>
-                  <option>Computer Science</option>
-                  <option>Physics</option>
-                  <option>English Literature</option>
-                  <option>Chemistry</option>
-                  <option>Biology</option>
+                  <option>Artificial Intelligence And Machine learning</option>
+                  <option>Operating System</option>
+                  <option>Design and Analysis of Algorithm</option>
+                  <option>Database Management System</option>
+                  <option>Formal Language And Automata Theory</option>
+                  <option>Data Structure</option>
                 </select>
               </div>
               <div>
