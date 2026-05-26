@@ -279,15 +279,22 @@ export function useEngagementDetection({ videoRef, webrtcRef, userId, userName, 
 
       // Emit engagement update to server
       if (webrtcRef.current?.sendEngagementUpdate) {
+        const attention = newStatus === 'focused'
+          ? 'focused'
+          : newStatus === 'distracted'
+            ? 'distracted'
+            : 'absent'
         webrtcRef.current.sendEngagementUpdate({
-          student_id: userId,
-          student_name: userName,
+          studentId: userId,
+          studentName: userName,
+          attention,
           face_detected: faceDetectedThisRound,
-          engagement_score: Math.round(avgEngagementScore),
-          engagement_status: newStatus,
-          camera_on: cameraOn,
-          anti_cheating_flags: antiCheatingFlagsRef.current,
-          timestamp: new Date().toISOString()
+          looking_at_screen: attention === 'focused',
+          stable_attention: attention === 'focused',
+          camera_state: cameraOn ? 'visible' : 'hidden',
+          detection_active: true,
+          engagement_eligible: attention === 'focused',
+          timestamp: Date.now()
         })
       }
     }

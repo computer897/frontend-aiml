@@ -796,17 +796,27 @@ export function createWebRTCManager() {
 
   /**
    * Student sends engagement status to server via socket.io.
-    * Server forwards it to the room's teacher as 'engagement-update'.
-   * @param {string} studentId
-   * @param {'attentive'|'not-detected'|'distracted'} status
-   * @param {string} studentName
-   * @param {boolean} cameraOn
-   * @param {boolean} isPresent
-   * @param {number} timestamp
+   * Server forwards it to the room's teacher as 'engagement-update'.
    */
-  function sendEngagementUpdate(studentId, status, studentName, cameraOn, isPresent = status !== 'not-detected', timestamp = Date.now()) {
+  function sendEngagementUpdate(payload, legacyStatus, legacyName, legacyCameraOn, legacyIsPresent, legacyTimestamp) {
     if (!socket || !roomId) return
-    socket.emit('engagement-update', { studentId, status, studentName, cameraOn, isPresent, timestamp })
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      socket.emit('engagement-update', { roomId, ...payload })
+      return
+    }
+
+    const studentId = payload
+    const status = legacyStatus
+    socket.emit('engagement-update', {
+      roomId,
+      studentId,
+      status,
+      studentName: legacyName,
+      cameraOn: legacyCameraOn,
+      isPresent: legacyIsPresent ?? status !== 'not-detected',
+      timestamp: legacyTimestamp ?? Date.now()
+    })
   }
 
   /**
@@ -826,6 +836,10 @@ export function createWebRTCManager() {
    */
   function broadcastCameraStatus(enabled) {
     if (!socket || !roomId) return
+    if (enabled && typeof enabled === 'object') {
+      socket.emit('camera-status', { roomId, ...enabled })
+      return
+    }
     socket.emit('camera-status', { roomId, enabled })
   }
 

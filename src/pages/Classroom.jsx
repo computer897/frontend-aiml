@@ -13,7 +13,6 @@ import EngagementList from '../components/EngagementList'
 import ChatPanel from '../components/ChatPanel'
 import DoubtsPanel from '../components/DoubtsPanel'
 import AttendanceReportModal from '../components/AttendanceReportModal'
-import { useEngagementDetection } from '../hooks/useEngagementDetection'
 import VideoTile from '../components/VideoTile'
 import VideoGrid from '../components/VideoGrid'
 import RemoteAudioPlayer from '../components/RemoteAudioPlayer'
@@ -690,6 +689,7 @@ function ParticipantsPanel({ participants, user, onMuteUser, onRemoveUser }) {
 function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessionId }) {
   const [micOn, setMicOn] = useState(initialSettings?.micOn ?? false)
   const [videoOn, setVideoOn] = useState(initialSettings?.videoOn ?? false)
+  const [cameraEnabled, setCameraEnabled] = useState(initialSettings?.cameraEnabled ?? true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [screenShareStream, setScreenShareStream] = useState(null)
@@ -709,6 +709,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
   const [teacherLeft, setTeacherLeft] = useState(false)
   const [forceMuteNotice, setForceMuteNotice] = useState(false)
   const [removedFromRoom, setRemovedFromRoom] = useState(false)
+  const [duplicateSession, setDuplicateSession] = useState(false)
 
   // Attendance report (shown after teacher ends class)
   const [attendanceReport, setAttendanceReport] = useState(null)
@@ -758,8 +759,10 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
   const faceTrackerRef = useRef(null) // Face detection tracker
+  const initializeFaceTrackingRef = useRef(null)
   const webrtcRef = useRef(null)
   const classroomRef = useRef(null)
+  const tabIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
 
   useEffect(() => {
     const activeSessionId = classData?.active_session_id || initialSessionId
@@ -767,6 +770,74 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
       setSessionId(activeSessionId)
     }
   }, [classData?.active_session_id, initialSessionId, sessionId])
+
+  useEffect(() => {
+    if (!user?.id || !classData?.class_id) return
+    const lockKey = `classroom_lock_${classData.class_id}_${user.id}`
+    const tabId = tabIdRef.current
+    const channel = new BroadcastChannel('classroom_lock')
+    let intervalId = null
+
+    const readLock = () => {
+      try {
+        const raw = localStorage.getItem(lockKey)
+        return raw ? JSON.parse(raw) : null
+      } catch {
+        return null
+      }
+    }
+
+    const writeLock = () => {
+      const payload = { tabId, ts: Date.now() }
+      localStorage.setItem(lockKey, JSON.stringify(payload))
+      channel.postMessage({ key: lockKey, ...payload })
+    }
+
+    const existing = readLock()
+    if (existing && existing.tabId !== tabId && Date.now() - existing.ts < 10000) {
+      setDuplicateSession(true)
+      setCameraEnabled(false)
+    } else {
+      writeLock()
+      intervalId = setInterval(writeLock, 4000)
+    }
+
+    const handleMessage = (event) => {
+      if (!event?.data || event.data.key !== lockKey) return
+      if (event.data.tabId && event.data.tabId !== tabId) {
+        setDuplicateSession(true)
+        setCameraEnabled(false)
+      }
+    }
+
+    channel.addEventListener('message', handleMessage)
+
+    const handleStorage = (event) => {
+      if (event.key !== lockKey || !event.newValue) return
+      try {
+        const payload = JSON.parse(event.newValue)
+        if (payload.tabId && payload.tabId !== tabId) {
+          setDuplicateSession(true)
+          setCameraEnabled(false)
+        }
+      } catch {
+        return
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+      channel.removeEventListener('message', handleMessage)
+      channel.close()
+      window.removeEventListener('storage', handleStorage)
+      const current = readLock()
+      if (current?.tabId === tabId) {
+        localStorage.removeItem(lockKey)
+      }
+    }
+  }, [classData?.class_id, user?.id])
 
   // ── Auto-hide controls on idle (3 seconds) ──────────────────────────────────
   useEffect(() => {
@@ -791,16 +862,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
     }
   }, [])
 
-  // ── Real-time engagement detection hook (students only) ──────────────────
-  // Runs face detection every 5 seconds when the student is approved.
-  // Sends engagement status to the signaling server → forwarded to teacher.
-  const { faceDetected: engagementFaceDetected } = useEngagementDetection({
-    videoRef: attendanceVideoRef,
-    webrtcRef,
-    userId: user?.id || user?._id,
-    userName: user?.name,
-    isActive: user?.role === 'student' && isStudentApproved,
-  })
+  // Engagement updates now flow from the unified face tracker below.
 
   // ── Initialize media and WebRTC ──
   useEffect(() => {
@@ -828,9 +890,12 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
         }
         // Apply initial mic/video settings to the stream
         const initMic = initialSettings?.micOn ?? true
-        const initVideo = initialSettings?.videoOn ?? true
+        const initCameraEnabled = initialSettings?.cameraEnabled ?? true
+        const initVideo = initialSettings?.videoOn ?? initCameraEnabled
+        setCameraEnabled(initCameraEnabled)
+        setVideoOn(initVideo)
         stream.getAudioTracks().forEach(t => { t.enabled = initMic })
-        stream.getVideoTracks().forEach(t => { t.enabled = initVideo })
+        stream.getVideoTracks().forEach(t => { t.enabled = initCameraEnabled })
         // Debug: log local stream tracks before passing to WebRTC
         console.log('[Classroom] Local stream ready — audio tracks:', stream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })))
         console.log('[Classroom] Local stream ready — video tracks:', stream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })))
@@ -972,19 +1037,21 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
         if (user?.role !== 'teacher') return
         setStudents(prev => {
           const idx = prev.findIndex(s => s.id === data.studentId)
-          const cameraOn = data.cameraOn !== false
-          // Presence based on FACE DETECTION (isPresent), not camera visibility
-          // - isPresent: true when face is detected and student is attentive
-          // - This allows teachers to see who is actually present even if camera is off
-          const isPresent = data.isPresent === true
+          const attention = data.attention || data.status || 'no_signal'
+          const cameraState = data.camera_state || (data.cameraOn === false ? 'hidden' : 'visible')
+          const isPresent = attention === 'focused'
           const entry = {
             id: data.studentId || data.socketId,
             socketId: data.socketId,
             name: data.studentName || 'Student',
             isPresent,
             status: isPresent ? 'active' : 'inactive',
-            cameraOn,
-            engagementStatus: data.status, // 'attentive', 'distracted', or 'not-detected'
+            cameraOn: cameraState !== 'disabled',
+            cameraState,
+            attention,
+            faceDetected: data.face_detected,
+            lookingAtScreen: data.looking_at_screen,
+            stableAttention: data.stable_attention,
             // Preserve existing joinTime or use server-provided one
             joinTime: data.joinTimeLabel || data.joinTime || null,
           }
@@ -1114,7 +1181,10 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
 
       // Remote participant toggled camera visibility
       rtc.callbacks.onCameraStatus = (data) => {
-        const { socketId, enabled, role: senderRole } = data
+        const { socketId, role: senderRole } = data
+        const enabled = data.camera_state
+          ? data.camera_state !== 'disabled'
+          : data.enabled
         setRemoteCameraStatus(prev => ({ ...prev, [socketId]: enabled }))
         // Also update the role in remoteStreams userInfo if we have it
         if (senderRole) {
@@ -1184,7 +1254,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
 
       // Initialize face detection for attendance (browser-side only)
       const initializeFaceTracking = async (sessionIdToUse) => {
-        if (!consentGiven || user?.role !== 'student') return
+        if (!consentGiven || user?.role !== 'student' || !cameraEnabled) return
         if (!attendanceVideoRef.current || !localStreamRef.current) {
           console.warn('[Classroom] Attendance video/stream unavailable; cannot start face tracking')
           return
@@ -1242,14 +1312,45 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           const tracker = createFaceTracker(
             attendanceVideo,
             async (detection) => {
+              const cameraState = cameraEnabled ? (videoOn ? 'visible' : 'hidden') : 'disabled'
+              const detectionActive = cameraEnabled && isStudentApproved
+              const attentionState = !detectionActive
+                ? 'no_signal'
+                : detection.face_detected
+                  ? (detection.stable_attention && detection.looking_at_screen ? 'focused' : 'distracted')
+                  : (detection.grace_active ? 'distracted' : 'absent')
+
               const metadata = generateAttendanceMetadata(
                 user?.id || user?._id,
                 classData.class_id,
                 detection
               )
               metadata.session_id = sessionIdToUse
+              metadata.student_name = user?.name
+              metadata.section = user?.department_name
+              metadata.camera_state = cameraState
+              metadata.detection_active = detectionActive
+              metadata.attention_state = attentionState
+              metadata.valid_frames = detection.valid_frames
+              metadata.grace_active = detection.grace_active
+              metadata.ear_variance = detection.ear_variance
 
               setLastDetection(detection)
+
+              if (webrtcRef.current && typeof webrtcRef.current.sendEngagementUpdate === 'function') {
+                webrtcRef.current.sendEngagementUpdate({
+                  studentId: user?.id || user?._id,
+                  studentName: user?.name,
+                  attention: attentionState,
+                  face_detected: detection.face_detected,
+                  looking_at_screen: detection.looking_at_screen,
+                  stable_attention: detection.stable_attention,
+                  camera_state: cameraState,
+                  detection_active: detectionActive,
+                  engagement_eligible: Boolean(detection.face_detected && detection.looking_at_screen && detection.stable_attention),
+                  timestamp: Date.now()
+                })
+              }
 
               try {
                 await attendanceAPI.submitMetadata(metadata)
@@ -1257,7 +1358,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
                 console.debug('[FaceTracking] Metadata submission failed (will retry):', err.message)
               }
             },
-            10000
+            3000
           )
 
           faceTrackerRef.current = tracker
@@ -1270,6 +1371,8 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           setFaceModelsLoading(false)
         }
       }
+
+      initializeFaceTrackingRef.current = initializeFaceTracking
 
       // Student: rejected by teacher
       rtc.callbacks.onJoinRejected = (message) => {
@@ -1363,6 +1466,37 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (user?.role !== 'student') return
+
+    if (!cameraEnabled) {
+      if (faceTrackerRef.current) {
+        faceTrackerRef.current.stop()
+        faceTrackerRef.current = null
+      }
+      setFaceTrackingActive(false)
+      if (webrtcRef.current && typeof webrtcRef.current.sendEngagementUpdate === 'function') {
+        webrtcRef.current.sendEngagementUpdate({
+          studentId: user?.id || user?._id,
+          studentName: user?.name,
+          attention: 'no_signal',
+          face_detected: false,
+          looking_at_screen: false,
+          stable_attention: false,
+          camera_state: 'disabled',
+          detection_active: false,
+          engagement_eligible: false,
+          timestamp: Date.now()
+        })
+      }
+      return
+    }
+
+    if (cameraEnabled && isStudentApproved && sessionId && initializeFaceTrackingRef.current && !faceTrackerRef.current) {
+      initializeFaceTrackingRef.current(sessionId)
+    }
+  }, [cameraEnabled, isStudentApproved, sessionId, user?.role, user?.id, user?._id, user?.name])
+
   // ── Calculate scheduled end time when class data is available ──
   useEffect(() => {
     if (classData?.duration_minutes) {
@@ -1412,34 +1546,52 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
     const vt = stream.getVideoTracks()
     if (vt.length === 0) return
 
+    if (!cameraEnabled) {
+      vt.forEach(t => { t.enabled = false })
+      if (webrtcRef.current && typeof webrtcRef.current.setVideoEnabled === 'function') {
+        webrtcRef.current.setVideoEnabled(false).catch(() => {})
+      }
+      if (webrtcRef.current && typeof webrtcRef.current.broadcastCameraStatus === 'function') {
+        webrtcRef.current.broadcastCameraStatus({
+          enabled: false,
+          cameraState: 'disabled'
+        })
+      }
+      if (attendanceVideoRef.current) {
+        attendanceVideoRef.current.style.visibility = 'hidden'
+      }
+      return
+    }
+
     if (user?.role === 'student') {
       // For students: keep the physical video track enabled (for face detection)
       // but use setVideoEnabled to control what peers see
       if (webrtcRef.current && typeof webrtcRef.current.setVideoEnabled === 'function') {
         webrtcRef.current.setVideoEnabled(videoOn).catch(() => {})
       }
-      // Broadcast camera status to room
       if (webrtcRef.current && typeof webrtcRef.current.broadcastCameraStatus === 'function') {
-        webrtcRef.current.broadcastCameraStatus(videoOn)
+        webrtcRef.current.broadcastCameraStatus({
+          enabled: videoOn,
+          cameraState: videoOn ? 'visible' : 'hidden'
+        })
       }
-      // Keep the local video track always enabled for face detection
       vt.forEach(t => { t.enabled = true })
-      // Keep attendance video element visible
       if (attendanceVideoRef.current) {
         attendanceVideoRef.current.style.visibility = 'visible'
       }
     } else {
-      // Teachers: normal toggle — disabling track sends black video to all peers
       vt.forEach(t => { t.enabled = videoOn })
       if (webrtcRef.current && typeof webrtcRef.current.setVideoEnabled === 'function') {
         webrtcRef.current.setVideoEnabled(videoOn).catch(() => {})
       }
-      // Broadcast camera status to room
       if (webrtcRef.current && typeof webrtcRef.current.broadcastCameraStatus === 'function') {
-        webrtcRef.current.broadcastCameraStatus(videoOn)
+        webrtcRef.current.broadcastCameraStatus({
+          enabled: videoOn,
+          cameraState: videoOn ? 'visible' : 'hidden'
+        })
       }
     }
-  }, [videoOn, user?.role])
+  }, [videoOn, user?.role, cameraEnabled])
 
   // ── Toggle audio track ──
   useEffect(() => {
@@ -1681,6 +1833,27 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
       {/* Removed from room overlay */}
       {removedFromRoom && <RemovedBanner onLeave={onLeave} />}
 
+      {duplicateSession && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full text-center">
+            <AlertCircle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-semibold mb-2">Another tab is active</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Engagement tracking is paused to prevent duplicate sessions. Close the other tab to resume detection.
+            </p>
+            <button
+              onClick={() => {
+                setDuplicateSession(false)
+                setCameraEnabled(true)
+              }}
+              className="px-4 py-2 bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition"
+            >
+              I closed the other tab
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Report Modal (teacher sees this after ending class) */}
       {showAttendanceReport && user?.role === 'teacher' && (
         <AttendanceReportModal
@@ -1763,12 +1936,25 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
             isVisible={controlsVisible}
           />
 
+          {user?.role === 'student' && (
+            <div className="absolute top-16 sm:top-20 right-4 z-30 flex flex-col gap-2">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${faceTrackingActive ? 'bg-green-600/90 text-white' : 'bg-gray-700/80 text-gray-200'}`}>
+                <span className={`w-2 h-2 rounded-full ${faceTrackingActive ? 'bg-green-300' : 'bg-gray-400'}`} />
+                {faceTrackingActive ? 'Detection Active' : 'Detection Paused'}
+              </div>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${!cameraEnabled ? 'bg-red-600/90 text-white' : videoOn ? 'bg-gray-700/80 text-gray-200' : 'bg-amber-600/90 text-white'}`}>
+                <span className={`w-2 h-2 rounded-full ${!cameraEnabled ? 'bg-red-200' : videoOn ? 'bg-gray-300' : 'bg-amber-200'}`} />
+                {!cameraEnabled ? 'Camera Disabled' : videoOn ? 'Camera Visible' : 'Camera Hidden'}
+              </div>
+            </div>
+          )}
+
           {/* Attendance Tracking Active Indicator - shown when camera is off but tracking continues */}
           {user?.role === 'student' && faceTrackingActive && !videoOn && (
             <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-3 py-2 bg-primary-600/90 backdrop-blur-sm rounded-lg shadow-lg border border-primary-500/50">
               <Eye className="w-4 h-4 text-white" />
               <span className="text-white text-xs font-medium">Attendance Tracking Active</span>
-              {lastDetection?.faceDetected && (
+              {lastDetection?.face_detected && (
                 <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               )}
             </div>
@@ -1777,11 +1963,11 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           {/* Face detection status indicator (for student awareness) */}
           {user?.role === 'student' && faceTrackingActive && videoOn && lastDetection && (
             <div className="absolute top-16 sm:top-20 left-4 z-30 flex items-center gap-2 px-2.5 py-1.5 bg-gray-800/80 backdrop-blur-sm rounded-lg">
-              <div className={`w-2 h-2 rounded-full ${lastDetection.faceDetected ? 'bg-green-400' : 'bg-red-400'}`} />
+              <div className={`w-2 h-2 rounded-full ${lastDetection.face_detected ? 'bg-green-400' : 'bg-red-400'}`} />
               <span className="text-xs text-gray-300">
-                {lastDetection.faceDetected ? 'Face detected' : 'Face not visible'}
+                {lastDetection.face_detected ? 'Face detected' : 'Face not visible'}
               </span>
-              {lastDetection.multipleFaces && (
+              {lastDetection.multiple_faces && (
                 <span className="text-xs text-yellow-400 ml-1">⚠ Multiple faces</span>
               )}
             </div>
@@ -1799,7 +1985,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           <div className="absolute inset-0">
             <VideoGrid
               localStream={localStream}
-              localVideoOn={videoOn}
+              localVideoOn={cameraEnabled && videoOn}
               localMicOn={micOn}
               remoteStreams={remoteStreams}
               remoteCameraStatus={remoteCameraStatus}
@@ -1814,6 +2000,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
           <ControlBar
             micOn={micOn}
             videoOn={videoOn}
+            cameraEnabled={cameraEnabled}
             isScreenSharing={isScreenSharing}
             screenShareSupported={screenShareSupported}
             showChat={showChat}
@@ -1824,6 +2011,7 @@ function LiveClassroom({ classData, user, onLeave, initialSettings, initialSessi
             user={user}
             onMicToggle={() => setMicOn(v => !v)}
             onVideoToggle={() => setVideoOn(v => !v)}
+            onCameraPowerToggle={() => setCameraEnabled(v => !v)}
             onScreenShare={handleScreenShare}
             onTogglePanel={togglePanel}
             onLeaveClass={handleLeaveClass}

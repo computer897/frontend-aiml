@@ -1,12 +1,13 @@
 import {
   Mic, MicOff, Video, VideoOff, MessageSquare,
-  MonitorUp, Hand, HelpCircle, Phone, Users
+  MonitorUp, Hand, HelpCircle, Phone, Users, Shield
 } from 'lucide-react'
 
 // ─── Bottom Control Bar (Google Meet style) ──────────────────────────────────
 function ControlBar({
   micOn,
   videoOn,
+  cameraEnabled,
   isScreenSharing,
   screenShareSupported,
   showChat,
@@ -17,6 +18,7 @@ function ControlBar({
   user,
   onMicToggle,
   onVideoToggle,
+  onCameraPowerToggle,
   onScreenShare,
   onTogglePanel,
   onLeaveClass,
@@ -60,7 +62,7 @@ function ControlBar({
             {micOn ? <Mic className="w-5 h-5 sm:w-6 sm:h-6 text-white" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
           </button>
 
-          {/* Video */}
+          {/* Video (privacy visibility) */}
           <button
             onClick={onVideoToggle}
             className={`p-3 sm:p-4 rounded-full transition-all duration-200 transform hover:scale-110 shrink-0 ${
@@ -68,10 +70,25 @@ function ControlBar({
                 ? 'bg-gray-700 hover:bg-gray-600'
                 : 'bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/50'
             }`}
-            title={videoOn ? 'Turn off camera' : 'Turn on camera'}
+            title={videoOn ? 'Hide camera from others' : 'Show camera to others'}
           >
             {videoOn ? <Video className="w-5 h-5 sm:w-6 sm:h-6 text-white" /> : <VideoOff className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
           </button>
+
+          {/* Camera power (stops detection) */}
+          {user?.role === 'student' && (
+            <button
+              onClick={onCameraPowerToggle}
+              className={`p-3 sm:p-4 rounded-full transition-all duration-200 transform hover:scale-110 shrink-0 ${
+                cameraEnabled
+                  ? 'bg-gray-700 hover:bg-gray-600'
+                  : 'bg-red-700 hover:bg-red-800 shadow-lg shadow-red-700/50'
+              }`}
+              title={cameraEnabled ? 'Disable camera (stop detection)' : 'Enable camera (resume detection)'}
+            >
+              <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            </button>
+          )}
 
           {/* Screen share - Teacher only */}
           {user?.role === 'teacher' && (

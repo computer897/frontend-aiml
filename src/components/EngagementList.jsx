@@ -5,8 +5,17 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
   const sortedStudents = [...students].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 
   const totalStudents = sortedStudents.length
-  const presentStudents = sortedStudents.filter((s) => s.isPresent !== false && s.status !== 'inactive').length
-  const absentStudents = totalStudents - presentStudents
+  const getAttentionBucket = (student) => {
+    if (student.cameraState === 'disabled' || student.attention === 'no_signal') return 'no_signal'
+    if (student.attention === 'focused') return 'engaged'
+    if (student.attention === 'distracted') return 'distracted'
+    if (student.attention === 'absent' || student.faceDetected === false) return 'no_face'
+    return 'no_signal'
+  }
+
+  const engagedCount = sortedStudents.filter((s) => getAttentionBucket(s) === 'engaged').length
+  const distractedCount = sortedStudents.filter((s) => getAttentionBucket(s) === 'distracted').length
+  const noFaceCount = sortedStudents.filter((s) => getAttentionBucket(s) === 'no_face').length
 
   // Export attendance to CSV
   const handleExportCSV = async () => {
@@ -82,18 +91,22 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 text-center">
             <p className="text-gray-400 text-xs mb-1">TOTAL</p>
             <p className="text-white text-2xl font-bold">{totalStudents}</p>
           </div>
           <div className="bg-green-900/20 border border-green-800/50 rounded-lg p-3 text-center">
-            <p className="text-green-400 text-xs mb-1">PRESENT</p>
-            <p className="text-green-400 text-2xl font-bold">{presentStudents}</p>
+            <p className="text-green-400 text-xs mb-1">ENGAGED</p>
+            <p className="text-green-400 text-2xl font-bold">{engagedCount}</p>
+          </div>
+          <div className="bg-amber-900/20 border border-amber-800/50 rounded-lg p-3 text-center">
+            <p className="text-amber-400 text-xs mb-1">DISTRACTED</p>
+            <p className="text-amber-400 text-2xl font-bold">{distractedCount}</p>
           </div>
           <div className="bg-red-900/20 border border-red-800/50 rounded-lg p-3 text-center">
-            <p className="text-red-400 text-xs mb-1">ABSENT</p>
-            <p className="text-red-400 text-2xl font-bold">{absentStudents}</p>
+            <p className="text-red-400 text-xs mb-1">NO FACE</p>
+            <p className="text-red-400 text-2xl font-bold">{noFaceCount}</p>
           </div>
         </div>
 
@@ -101,23 +114,19 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
         <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-gray-700 text-xs">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-            <span className="text-gray-400">Face detected & focused</span>
+            <span className="text-gray-400">Engaged (focused + stable)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
+            <span className="text-gray-400">Distracted (face present, not focused)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-            <span className="text-gray-400">No face detected (Absent)</span>
+            <span className="text-gray-400">No face detected</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-yellow-400">📷 Off</span>
-            <span className="text-gray-400">Camera disabled but tracking</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-blue-400">👁️ Focused</span>
-            <span className="text-gray-400">Student looking at screen</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-orange-400">😕 Distracted</span>
-            <span className="text-gray-400">Face detected but not focused</span>
+            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+            <span className="text-gray-400">No signal (camera disabled)</span>
           </div>
         </div>
       </div>
@@ -132,7 +141,13 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
           </div>
         ) : (
           sortedStudents.map((student) => {
-            const isPresent = student.isPresent !== false && student.status !== 'inactive'
+            const bucket = getAttentionBucket(student)
+            const statusPill = {
+              engaged: { label: 'Engaged', dot: 'bg-green-400', pill: 'bg-green-900/30 text-green-400' },
+              distracted: { label: 'Distracted', dot: 'bg-amber-400', pill: 'bg-amber-900/30 text-amber-400' },
+              no_face: { label: 'No face', dot: 'bg-red-400', pill: 'bg-red-900/30 text-red-400' },
+              no_signal: { label: 'No signal', dot: 'bg-gray-400', pill: 'bg-gray-900/30 text-gray-300' }
+            }[bucket]
             return (
               <div
                 key={student.id}
@@ -154,30 +169,18 @@ function EngagementList({ students, onSelectStudent, classId, sessionId }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className={`w-2 h-2 rounded-full ${isPresent ? 'bg-green-400' : 'bg-red-400'}`} />
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${
-                      isPresent
-                        ? 'bg-green-900/30 text-green-400'
-                        : 'bg-red-900/30 text-red-400'
-                    }`}>
-                      {isPresent ? 'Present' : 'Absent'}
+                    <div className={`w-2 h-2 rounded-full ${statusPill.dot}`} />
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${statusPill.pill}`}>
+                      {statusPill.label}
                     </span>
-                    {/* Camera status indicator */}
-                    {student.cameraOn === false && (
-                      <div className="text-xs px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded-full" title="Camera off but face detected">
-                        📷 Off
+                    {student.cameraState === 'hidden' && (
+                      <div className="text-xs px-2 py-1 bg-amber-900/30 text-amber-400 rounded-full" title="Camera hidden, detection active">
+                        Camera Hidden
                       </div>
                     )}
-                    {/* Engagement status indicator */}
-                    {isPresent && student.engagementStatus && (
-                      <div className={`text-xs px-2 py-1 rounded-full ${
-                        student.engagementStatus === 'attentive'
-                          ? 'bg-blue-900/30 text-blue-400'
-                          : student.engagementStatus === 'distracted'
-                          ? 'bg-orange-900/30 text-orange-400'
-                          : 'bg-gray-900/30 text-gray-400'
-                      }`}>
-                        {student.engagementStatus === 'attentive' ? '👁️ Focused' : student.engagementStatus === 'distracted' ? '😕 Distracted' : '❓ Detecting'}
+                    {student.cameraState === 'disabled' && (
+                      <div className="text-xs px-2 py-1 bg-gray-900/30 text-gray-300 rounded-full" title="Camera disabled">
+                        Camera Disabled
                       </div>
                     )}
                   </div>

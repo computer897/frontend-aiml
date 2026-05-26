@@ -200,15 +200,18 @@ export function useEngagementDetection({ videoRef, webrtcRef, userId, userName, 
 
       // *** CRITICAL FIX: Send proper attention field to backend ***
       // This allows dashboard to correctly count Focused vs Distracted vs Absent
-      webrtcRef.current.sendEngagementUpdate(
-        userId,
-        stableAttention,        // Now sending: focused | distracted | absent
-        userName,
-        cameraOn,
-        faceDetectedThisRound,
-        currentAttentionScore,
-        Date.now()
-      )
+      webrtcRef.current.sendEngagementUpdate({
+        studentId: userId,
+        studentName: userName,
+        attention: stableAttention,
+        face_detected: faceDetectedThisRound,
+        looking_at_screen: stableAttention === 'focused',
+        stable_attention: stableAttention === 'focused',
+        camera_state: cameraOn ? 'visible' : 'hidden',
+        detection_active: true,
+        engagement_eligible: stableAttention === 'focused',
+        timestamp: Date.now()
+      })
     }
   }, [userId, userName, videoRef, webrtcRef])
 

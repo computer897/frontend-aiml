@@ -39,6 +39,7 @@ function LiveEngagementPanel({
   const focusedCount = students.filter(s => s.attention === 'focused').length
   const distractedCount = students.filter(s => s.attention === 'distracted').length
   const absentCount = students.filter(s => s.attention === 'absent').length
+  const noSignalCount = students.filter(s => s.attention === 'no_signal' || s.camera_state === 'disabled').length
 
   // Status info based on ATTENTION field
   const getStatusInfo = (student) => {
@@ -52,8 +53,17 @@ function LiveEngagementPanel({
       }
     }
 
+    const attention = student.attention || (student.camera_state === 'disabled' ? 'no_signal' : 'absent')
     // *** KEY FIX: Use attention field, not face_detected ***
-    switch (student.attention) {
+    switch (attention) {
+      case 'no_signal':
+        return {
+          dotColor: 'bg-gray-400',
+          ringColor: 'ring-gray-200',
+          label: 'No signal',
+          textColor: 'text-gray-500',
+          backgroundColor: 'bg-gray-50 dark:bg-gray-900/20'
+        }
       case 'focused':
         return {
           dotColor: 'bg-green-500',
@@ -129,7 +139,7 @@ function LiveEngagementPanel({
         </div>
 
         {/* *** FIXED SUMMARY STATS *** */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-5 gap-2 mb-4">
           <div className="text-center p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <p className="text-lg font-bold text-gray-900 dark:text-white">{totalStudents}</p>
             <p className="text-[10px] text-gray-500">Total</p>
@@ -145,6 +155,10 @@ function LiveEngagementPanel({
           <div className="text-center p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
             <p className="text-lg font-bold text-red-600">{absentCount}</p>
             <p className="text-[10px] text-red-600">Absent</p>
+          </div>
+          <div className="text-center p-2 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
+            <p className="text-lg font-bold text-gray-500">{noSignalCount}</p>
+            <p className="text-[10px] text-gray-500">No signal</p>
           </div>
         </div>
 
